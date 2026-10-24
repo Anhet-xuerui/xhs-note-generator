@@ -44,7 +44,7 @@ AI 味检测和违禁词都是**程序化规则**，模型只做两件事：按�
 
 ## 评测结果
 
-> 三个实验的完整报告：[markdown](docs/samples/eval-report-pilot.md) / [HTML](docs/samples/eval-report-pilot.html)。
+> 两次运行的完整报告：[第一次](docs/samples/eval-report-run1.md) / [第二次](docs/samples/eval-report-run2.md)（各有 HTML 版）。
 > 判据与实验设计见 [设计文档 §12](docs/superpowers/specs/2026-10-23-xhs-multiagent-design.md)。
 
 ### 两次全量跑（各 10 主题）
