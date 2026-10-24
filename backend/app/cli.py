@@ -127,6 +127,36 @@ def _swapped_reader(settings: Settings) -> Deps:
     return Deps(llm=LLMClient(swapped), settings=swapped)
 
 
+async def _evaluate(args) -> EvalBundle:
+    """全部实验跑在**同一个事件循环**里：LLMClient 的 httpx 连接是绑定 loop 的。"""
+    settings = Settings.load()
+    deps = Deps(llm=LLMClient(settings), settings=settings)
+    swapped = _swapped_reader(settings)
+    topics = _load_topics()[: args.topics]
+    personas = _load_personas()
+
+    corpus = await build_corpus(topics, deps, personas=personas)
+    e1 = await run_e1(corpus, deps)
+    e2 = await run_e2(corpus, deps, swapped)
+    e3 = {
+        "A": await run_e3(topics[: args.pairs], deps, deps, mode="A", personas=personas),
+        "B": await run_e3(topics[: args.pairs], deps, deps, mode="B", personas=personas),
+        "C": await run_e3(topics[: args.pairs], swapped, deps, mode="C", personas=personas),
+    }
+    host = (settings.reader_base_url or "").split("//")[-1].split("/")[0]
+    return EvalBundle(
+        topics=topics,
+        corpus_n=len(corpus.items),
+        prompt_sha=e1.prompt_sha,
+        writer_model=settings.writer_model,
+        reader_model=settings.reader_model or "",
+        reader_host=host,
+        e1=e1,
+        e2=e2,
+        e3=e3,
+    )
+
+
 def _run_eval(args) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -134,32 +164,7 @@ def _run_eval(args) -> int:
     if args.dry_run:
         bundle = synthetic_bundle()
     else:
-        settings = Settings.load()
-        deps = Deps(llm=LLMClient(settings), settings=settings)
-        swapped = _swapped_reader(settings)
-        topics = _load_topics()[: args.topics]
-        personas = _load_personas()
-
-        corpus = asyncio.run(build_corpus(topics, deps, personas=personas))
-        e1 = asyncio.run(run_e1(corpus, deps))
-        e2 = asyncio.run(run_e2(corpus, deps, swapped))
-        e3 = {
-            "A": asyncio.run(run_e3(topics[: args.pairs], deps, deps, mode="A", personas=personas)),
-            "B": asyncio.run(run_e3(topics[: args.pairs], deps, deps, mode="B", personas=personas)),
-            "C": asyncio.run(run_e3(topics[: args.pairs], swapped, deps, mode="C", personas=personas)),
-        }
-        host = (settings.reader_base_url or "").split("//")[-1].split("/")[0]
-        bundle = EvalBundle(
-            topics=topics,
-            corpus_n=len(corpus.items),
-            prompt_sha=e1.prompt_sha,
-            writer_model=settings.writer_model,
-            reader_model=settings.reader_model or "",
-            reader_host=host,
-            e1=e1,
-            e2=e2,
-            e3=e3,
-        )
+        bundle = asyncio.run(_evaluate(args))
 
     (out_dir / "report.md").write_text(eval_markdown(bundle), encoding="utf-8")
     (out_dir / "report.html").write_text(eval_html(bundle), encoding="utf-8")
