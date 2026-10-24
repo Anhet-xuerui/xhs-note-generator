@@ -10,12 +10,14 @@ import asyncio
 import json
 import sys
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from app.agents.planner import PlannerContractError
 from app.config import ProviderNotConfigured, Settings, UnknownModelPrice
+from app.evaluation.aggregate import summarize
 from app.evaluation.corpus import build_corpus
 from app.evaluation.report import EvalBundle, synthetic_bundle
 from app.evaluation.report import html as eval_html
@@ -127,14 +129,7 @@ def _swapped_reader(settings: Settings) -> Deps:
     return Deps(llm=LLMClient(swapped), settings=swapped)
 
 
-async def _evaluate(args) -> EvalBundle:
-    """全部实验跑在**同一个事件循环**里：LLMClient 的 httpx 连接是绑定 loop 的。"""
-    settings = Settings.load()
-    deps = Deps(llm=LLMClient(settings), settings=settings)
-    swapped = _swapped_reader(settings)
-    topics = _load_topics()[: args.topics]
-    personas = _load_personas()
-
+async def _one_round(args, settings, deps, swapped, topics, personas) -> EvalBundle:
     corpus = await build_corpus(topics, deps, personas=personas)
     e1 = await run_e1(corpus, deps)
     e1_pair = await run_e1_pairwise(corpus, deps)
@@ -157,6 +152,55 @@ async def _evaluate(args) -> EvalBundle:
         e2=e2,
         e3=e3,
     )
+
+
+def _metrics(bundle: EvalBundle) -> dict[str, float]:
+    rows: dict[str, float | None] = {
+        "E1 绝对打分正确率": bundle.e1.ordering_accuracy,
+        "E1 Kendall τ": bundle.e1.kendall_tau,
+        "E2 click κ": bundle.e2.kappa_click,
+        "E2 save κ": bundle.e2.kappa_save,
+        "E2 score ρ": bundle.e2.spearman_rho,
+        "E3 A 通过率": bundle.e3["A"].pass_rate if "A" in bundle.e3 else None,
+        "E3 B 通过率": bundle.e3["B"].pass_rate if "B" in bundle.e3 else None,
+        "E3 C 通过率": bundle.e3["C"].pass_rate if "C" in bundle.e3 else None,
+        "E3 B tokens": float(bundle.e3["B"].tokens) if "B" in bundle.e3 else None,
+        "E3 B 成本(元)": bundle.e3["B"].cost_cny if "B" in bundle.e3 else None,
+    }
+    if bundle.e1_pair is not None:
+        rows["E1 两两比较正确率"] = bundle.e1_pair.accuracy
+        rows["E1 两两比较 tie 率"] = bundle.e1_pair.tie_rate
+    return {key: value for key, value in rows.items() if value is not None}
+
+
+def _ci_rows(bundles: list[EvalBundle]) -> list[tuple[str, str]]:
+    keys = [key for key in _metrics(bundles[0]) if all(key in _metrics(b) for b in bundles)]
+    rows: list[tuple[str, str]] = []
+    for key in keys:
+        summary = summarize([_metrics(b)[key] for b in bundles])
+        value = summary.pct() if key.endswith("率") or "κ" in key or "ρ" in key or "τ" in key else summary.label(2)
+        rows.append((key, value))
+    return rows
+
+
+async def _evaluate(args) -> EvalBundle:
+    """全部实验跑在**同一个事件循环**里：LLMClient 的 httpx 连接是绑定 loop 的。"""
+    settings = Settings.load()
+    deps = Deps(llm=LLMClient(settings), settings=settings)
+    swapped = _swapped_reader(settings)
+    topics = _load_topics()[: args.topics]
+    personas = _load_personas()
+
+    repeats = max(1, args.repeats)
+    bundles: list[EvalBundle] = []
+    for index in range(repeats):
+        print(f"[eval] 第 {index + 1}/{repeats} 轮", file=sys.stderr)
+        bundles.append(await _one_round(args, settings, deps, swapped, topics, personas))
+
+    final = bundles[-1]
+    if repeats > 1:
+        final = replace(final, ci_rows=_ci_rows(bundles))
+    return final
 
 
 def _run_eval(args) -> int:
@@ -195,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("--pairs", type=int, default=3, help="E3 每组跑多少个主题")
     evaluate.add_argument("--out", required=True, help="输出目录（写 report.md 与 report.html）")
     evaluate.add_argument("--dry-run", action="store_true", help="用合成数据渲染报告，不调用任何 API")
+    evaluate.add_argument("--repeats", type=int, default=1, help="重复几次（每次重新生成语料），用于均值与 95% CI")
 
     report = sub.add_parser("report", help="把 JSONL 事件渲染成单文件 HTML 报告")
     report.add_argument("--trace", required=True, help="run 时写出的 JSONL 路径")
