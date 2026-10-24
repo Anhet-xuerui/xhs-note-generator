@@ -48,3 +48,20 @@ def test_ordering_accuracy_counts_strict_order():
 
 def test_ordering_accuracy_empty_is_zero():
     assert ordering_accuracy([]) == 0.0
+
+def test_bootstrap_ci_contains_mean_and_shrinks_with_data():
+    from app.evaluation.aggregate import summarize
+    from app.evaluation.stats import bootstrap_ci
+
+    values = [0.2, 0.4, 0.6, 0.8]
+    low, high = bootstrap_ci(values, iterations=500)
+
+    assert low <= sum(values) / len(values) <= high
+    summary = summarize(values, iterations=500)
+    assert summary.n == 4 and summary.label().startswith("0.50")
+
+
+def test_bootstrap_ci_of_constant_is_degenerate():
+    from app.evaluation.stats import bootstrap_ci
+
+    assert bootstrap_ci([1.0, 1.0, 1.0]) == (1.0, 1.0)

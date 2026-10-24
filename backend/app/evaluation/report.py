@@ -23,6 +23,7 @@ class EvalBundle:
     e1_pair: E1PairwiseResult | None = None
     e3: dict[str, E3Row] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    ci_rows: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _pct(value: float | None) -> str:
@@ -51,6 +52,13 @@ def markdown(bundle: EvalBundle) -> str:
         f"- 读者 prompt 指纹：`{bundle.prompt_sha}`（改过 prompt 就不再是同一组数据）",
         f"- 写作模型：`{bundle.writer_model}`；读者模型：`{bundle.reader_model}`（`{bundle.reader_host}`）",
         "",
+        *(
+            ["## 多次重复（均值 [95% CI]）", "", "| 指标 | 均值 [95% CI] |", "|---|---|"]
+            + [f"| {label} | {value} |" for label, value in bundle.ci_rows]
+            + [""]
+            if bundle.ci_rows
+            else []
+        ),
         "## E1 判别力（construct validity）",
         "",
         "同一批三档稿交给读者打分，看它能不能把 good / mid / bad 排对。",
@@ -184,6 +192,13 @@ def html(bundle: EvalBundle) -> str:
 <div class="note">主题数 N = {len(bundle.topics)}，三档稿共 {bundle.corpus_n * 3} 篇 ·
 读者 prompt 指纹 <code>{_esc(bundle.prompt_sha)}</code><br>
 写作模型 <code>{_esc(bundle.writer_model)}</code> · 读者模型 <code>{_esc(bundle.reader_model)}</code></div>
+
+{(
+        "<h2>多次重复（均值 [95% CI]）</h2>"
+        + _html_table(["指标", "均值 [95% CI]"], [[f"<code>{_esc(a)}</code>", _esc(b)] for a, b in bundle.ci_rows])
+        if bundle.ci_rows
+        else ""
+    )}
 
 <h2>E1 判别力</h2>
 {_html_table(["指标", "值", "判据"], e1_rows)}

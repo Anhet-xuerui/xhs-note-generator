@@ -90,3 +90,31 @@ def ordering_accuracy(groups: Sequence[tuple[float, float, float]]) -> float:
         return 0.0
     correct = sum(1 for good, mid, bad in groups if good > mid > bad)
     return correct / len(groups)
+
+
+def bootstrap_ci(
+    values: Sequence[float],
+    *,
+    iterations: int = 2000,
+    seed: int = 42,
+    alpha: float = 0.05,
+) -> tuple[float, float]:
+    """均值的 bootstrap 百分位置信区间。样本量小时它比正态近似诚实得多。"""
+    import random
+
+    if not values:
+        raise ValueError("bootstrap_ci 需要至少一个样本")
+    data = list(values)
+    if len(set(data)) == 1:
+        return data[0], data[0]
+
+    rng = random.Random(seed)
+    means = []
+    n = len(data)
+    for _ in range(iterations):
+        sample = [data[rng.randrange(n)] for _ in range(n)]
+        means.append(sum(sample) / n)
+    means.sort()
+    lower = means[int((alpha / 2) * iterations)]
+    upper = means[int((1 - alpha / 2) * iterations) - 1]
+    return lower, upper

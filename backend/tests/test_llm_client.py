@@ -137,3 +137,32 @@ async def test_thinking_disabled_and_json_mode_requested(settings):
 
     assert captured[0]["thinking"] == {"type": "disabled"}
     assert captured[0]["response_format"] == {"type": "json_object"}
+
+async def test_retries_on_transient_5xx(settings):
+    """上游 503（本机网络抖动）必须重试：一次网络抖动不该毁掉整轮评测。"""
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(503, json={"error": {"message": "network down"}})
+        return httpx.Response(200, json=_completion('{"click": true, "read_through": 0.8}'))
+
+    client = LLMClient(settings, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+    result = await client.structured(role="writer", system="s", user="u", schema=Sample)
+
+    assert result.attempts == 2
+    assert result.usage.calls == 2
+
+
+async def test_does_not_retry_client_errors(settings):
+    """400 是本机请求的问题，重试只会重复犯错。"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"message": "bad request"}})
+
+    client = LLMClient(settings, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+    with pytest.raises(NodeCallFailed):
+        await client.structured(role="writer", system="s", user="u", schema=Sample)
