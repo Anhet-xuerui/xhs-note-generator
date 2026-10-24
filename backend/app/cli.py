@@ -178,7 +178,8 @@ def _ci_rows(metrics_all: list[dict[str, float]]) -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = []
     for key in keys:
         summary = summarize([item[key] for item in metrics_all])
-        value = summary.pct() if key.endswith("率") or "κ" in key or "ρ" in key or "τ" in key else summary.label(2)
+        # 只有比例类用百分比；κ/ρ/τ 是相关系数，写成 0.84 而不是 84%
+        value = summary.pct() if key.endswith("率") else summary.label(2)
         rows.append((key, value))
     return rows
 
