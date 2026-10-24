@@ -6,6 +6,9 @@ D5 换成 LangGraph 时，这里的分支会原样搬进条件边；在此之前
 
 from __future__ import annotations
 
+from app.agents.cover import run_cover
+from app.agents.gatekeeper import run_gatekeeper
+from app.agents.humanize import run_humanize
 from app.agents.planner import run_planner
 from app.agents.profile import run_profile
 from app.agents.reader import run_reader
@@ -108,4 +111,31 @@ async def run_loop(state: RunState, deps: Deps) -> RunState:
     if state["best_round"] is not None:
         # 未通过时交分数最高那一版，不是最后一版（§7）。
         state["draft"] = state["draft_history"][state["best_round"] - 1]
+    return state
+
+
+async def finish_draft(state: RunState, deps: Deps) -> RunState:
+    """定稿之后的三个角色：封面 → 人味校订 → 守门人（§7 的主循环尾部）。
+
+    守门人必须排在最后：人味校订会改写句子，改写可能引入违禁词。
+    """
+    if state.get("status") == "failed" or state.get("draft") is None:
+        return state
+
+    await run_cover(state, deps)
+    humanized = await run_humanize(state, deps)
+    gate = await run_gatekeeper(state, deps, humanized)
+
+    if not gate.passed:
+        # 命中项再修一次（不计轮次），然后复核；仍不过就 gate_blocked。
+        hints = [
+            finding.model_dump()
+            for finding in gate.findings
+            if finding.severity == "blocking" and not finding.false_positive
+        ]
+        humanized = await run_humanize(state, deps, hints=hints)
+        gate = await run_gatekeeper(state, deps, humanized)
+
+    if not gate.passed:
+        state["status"] = "gate_blocked"
     return state

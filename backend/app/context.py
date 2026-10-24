@@ -78,6 +78,19 @@ def build_writer_context(state: RunState) -> dict:
     }
 
 
+def build_cover_context(state: RunState) -> dict:
+    """封面：只有标题、首句和 tone——看不到正文全篇（§6）。"""
+    draft = state.get("draft")
+    persona = _persona(state)
+    body = draft.body if draft else ""
+    sentences = split_sentences(body)
+    return {
+        "title": draft.title if draft else None,
+        "first_sentence": sentences[0]["text"] if sentences else "",
+        "tone": list(persona.tone),
+    }
+
+
 def build_reader_context(state: RunState) -> dict:
     """读者：成稿全文 + 画像的读者侧字段（**不含 real_material**）。"""
     draft = state.get("draft")

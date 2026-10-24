@@ -94,6 +94,68 @@ class WriterResponse(BaseModel):
     reason: str
 
 
+SmellCategory = Literal[
+    "abstract_noun",
+    "idiom_density",
+    "ai_pattern",
+    "uniform_paragraph",
+    "no_anchor",
+    "emoji_rhythm",
+]
+
+
+class SmellHit(BaseModel):
+    """一类 AI 味命中（§8）。spans 是 Python 字符下标，不是字节。"""
+
+    category: SmellCategory
+    spans: list[tuple[int, int]] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+    penalty: float
+
+
+class SmellReport(BaseModel):
+    score: int = Field(ge=0, le=100, description="0–100，越高越像 AI")
+    hits: list[SmellHit] = Field(default_factory=list)
+
+
+class ChangeLog(BaseModel):
+    """一处改写：改了什么、为什么改。被回退时也保留，供前端展示「想改但被拦下了」。"""
+
+    before: str
+    after: str
+    category: str
+    reason: str
+
+
+class HumanizedDraft(BaseModel):
+    """人味校订的产物。fidelity=reverted 时正文是**改写前**的版本（§8）。"""
+
+    title: str
+    cover_text: str | None = None
+    body: str
+    tags: list[str] = Field(default_factory=list)
+    smell_before: int = Field(ge=0, le=100)
+    smell_after: int = Field(ge=0, le=100)
+    changes: list[ChangeLog] = Field(default_factory=list)
+    fidelity: Literal["passed", "reverted", "skipped"]
+
+
+class GateFinding(BaseModel):
+    """一条合规命中。`false_positive` 由模型判定，其余由正则给出。"""
+
+    rule_id: str
+    severity: Literal["blocking", "warning"]
+    matched: str
+    span: tuple[int, int]
+    false_positive: bool = False
+    hint: str = ""
+
+
+class GateResult(BaseModel):
+    passed: bool
+    findings: list[GateFinding] = Field(default_factory=list)
+
+
 class RunInput(BaseModel):
     persona: PersonaInput
     topic: str = Field(min_length=1)
