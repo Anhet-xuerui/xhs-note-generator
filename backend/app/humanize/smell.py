@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 import statistics
-from typing import Literal
 
 import jieba.posseg as pseg
 

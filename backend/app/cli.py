@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from app.agents.planner import PlannerContractError
 from app.config import ProviderNotConfigured, Settings, UnknownModelPrice
 from app.graph.decisions import evaluate
-from app.graph.loop import run_loop
+from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
 from app.schemas import PersonaInput, RunInput, Usage
 from app.state import RunState
@@ -55,8 +55,12 @@ def result_payload(state: RunState) -> dict:
     # 未达标项必须描述**交付的那一轮**，不是最后一轮（评审 I3）。
     judged = verdicts[best - 1] if best and 0 <= best - 1 < len(verdicts) else (verdicts[-1] if verdicts else None)
     failed_checks = evaluate(judged).failed_checks if judged else []
+    humanized = state.get("humanized")
+    smell = state.get("smell")
+    gate = state.get("gate")
     return {
         "title": draft.title if draft else None,
+        "cover_text": draft.cover_text if draft else None,
         "body": draft.body if draft else None,
         "tags": list(draft.tags) if draft else [],
         "status": state.get("status"),
@@ -66,6 +70,13 @@ def result_payload(state: RunState) -> dict:
             "best_round": state.get("best_round"),
             "failed_checks": failed_checks,
             "degraded_rounds": list(state.get("degraded_rounds") or []),
+            "smell": (
+                {"before": humanized.smell_before, "after": humanized.smell_after, "fidelity": humanized.fidelity}
+                if humanized
+                else ({"before": smell.score, "after": smell.score, "fidelity": "skipped"} if smell else None)
+            ),
+            "changes": len(humanized.changes) if humanized else 0,
+            "gate_findings": [finding.model_dump() for finding in gate.findings] if gate else [],
             "usage": {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
@@ -75,6 +86,11 @@ def result_payload(state: RunState) -> dict:
             },
         },
     }
+
+
+async def _run_pipeline(state: RunState, deps: Deps) -> RunState:
+    """一条完整的 run：讨论循环 + 定稿尾部（封面 / 人味校订 / 守门人）。"""
+    return await finish_draft(await run_loop(state, deps), deps)
 
 
 def _load_persona(path: str) -> PersonaInput:
@@ -109,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        state = asyncio.run(run_loop(new_state(persona, args.topic), deps))
+        state = asyncio.run(_run_pipeline(new_state(persona, args.topic), deps))
     except (NodeCallFailed, UnknownModelPrice, PlannerContractError) as exc:
         # 跑到一半炸了也要给出可读结果，而不是抛出 traceback（评审 C2）。
         print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2))

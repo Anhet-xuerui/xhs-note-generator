@@ -1,0 +1,33 @@
+# 违禁词规则库（§9）：只覆盖跨赛道通用类目，赛道不固定。
+# 加词直接改这里；severity 决定是「必须再修一次」还是「提示」。
+rules:
+  - id: absolute-claim
+    severity: blocking
+    patterns: ["最", "第一", "唯一", "100%", "彻底", "保证"]
+    hint: 换成主观表达或具体范围（「我觉得」「我这半年」）
+
+  - id: medical-efficacy
+    severity: blocking
+    patterns: ["治疗", "祛痘", "见效", "排毒", "根治"]
+    hint: 不承诺效果，改成个人体验描述
+
+  - id: diversion
+    severity: blocking
+    patterns: ["加微信", "私信我", "VX", "vx", "评论区扣1"]
+    hint: 平台内不导流
+
+# 结构性规则：不靠正则，直接看长度
+structure:
+  - id: body-length
+    field: body
+    severity: warning
+    min: 300
+    max: 800
+    hint: 正文控制在 300–800 字
+
+  - id: tag-count
+    field: tags
+    severity: warning
+    min: 3
+    max: 8
+    hint: 标签 3–8 个

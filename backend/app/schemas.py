@@ -140,6 +140,22 @@ class HumanizedDraft(BaseModel):
     fidelity: Literal["passed", "reverted", "skipped"]
 
 
+class GateFinding(BaseModel):
+    """一条合规命中。`false_positive` 由模型判定，其余由正则给出。"""
+
+    rule_id: str
+    severity: Literal["blocking", "warning"]
+    matched: str
+    span: tuple[int, int]
+    false_positive: bool = False
+    hint: str = ""
+
+
+class GateResult(BaseModel):
+    passed: bool
+    findings: list[GateFinding] = Field(default_factory=list)
+
+
 class RunInput(BaseModel):
     persona: PersonaInput
     topic: str = Field(min_length=1)

@@ -5,7 +5,6 @@ from __future__ import annotations
 from app.agents.humanize import HumanizeOutput, run_humanize
 from app.llm.client import NodeCallFailed
 from app.schemas import ChangeLog, Draft, ProfileCard
-
 from tests.helpers import deps_with, make_state
 
 ANCHOR = "被二房东坑过一个月押金"

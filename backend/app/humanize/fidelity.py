@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from app.schemas import ProfileCard
+from app.schemas import PersonaInput, ProfileCard
 
 NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 PLACE_RE = re.compile(
@@ -39,7 +39,7 @@ def proper_nouns_of(text: str) -> list[str]:
     return sorted(found)
 
 
-def check(before: str, after: str, profile: ProfileCard) -> FidelityResult:
+def check(before: str, after: str, profile: ProfileCard | PersonaInput) -> FidelityResult:
     if not before.strip():
         return FidelityResult(True)
 
@@ -49,7 +49,9 @@ def check(before: str, after: str, profile: ProfileCard) -> FidelityResult:
     if proper_nouns_of(before) != proper_nouns_of(after):
         return FidelityResult(False, "专名集合变了")
 
-    missing = [anchor for anchor in profile.anchors if anchor not in after]
+    # 没有画像卡时退化为「真实经历的前两条」，至少不放弃锚点这一条约束。
+    anchors = getattr(profile, "anchors", None) or list(profile.real_material[:2])
+    missing = [anchor for anchor in anchors if anchor not in after]
     if missing:
         return FidelityResult(False, f"素材锚点丢了：{missing[0]}")
 

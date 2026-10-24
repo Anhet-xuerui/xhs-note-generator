@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from app.agents.cover import CoverText, run_cover
-
 from app.schemas import Draft
-
 from tests.helpers import deps_with, make_state
 
 MARKER = "第二句才出现的独特标记"

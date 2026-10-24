@@ -21,7 +21,7 @@ from app.schemas import (
     WriterResponse,
 )
 
-RunStatus = Literal["running", "passed", "exhausted", "failed"]
+RunStatus = Literal["running", "passed", "exhausted", "failed", "gate_blocked"]
 
 
 class RunState(TypedDict, total=False):
