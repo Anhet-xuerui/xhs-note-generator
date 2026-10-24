@@ -5,7 +5,6 @@ from __future__ import annotations
 from app.evaluation.corpus import BAD_PROMPT, build_corpus
 from app.evaluation.runners import run_e1, run_e2, run_e3
 from app.schemas import Draft, Verdict
-
 from tests.helpers import deps_with, make_angles, make_card, make_persona, make_writer_output
 
 

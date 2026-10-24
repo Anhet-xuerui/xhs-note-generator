@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.evaluation.judge import judge_draft, reader_prompt_sha256
 from app.schemas import Draft, Objection, PersonaInput, Verdict
-
 from tests.helpers import deps_with
 
 BODY = "第一年租房我什么都不懂。签约那天中介笑得很热情。后来才知道隔音是硬伤。"

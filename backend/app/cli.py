@@ -16,6 +16,11 @@ from pydantic import ValidationError
 
 from app.agents.planner import PlannerContractError
 from app.config import ProviderNotConfigured, Settings, UnknownModelPrice
+from app.evaluation.corpus import build_corpus
+from app.evaluation.report import EvalBundle, synthetic_bundle
+from app.evaluation.report import html as eval_html
+from app.evaluation.report import markdown as eval_markdown
+from app.evaluation.runners import run_e1, run_e2, run_e3
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
@@ -95,6 +100,73 @@ async def _run_pipeline(state: RunState, deps: Deps) -> RunState:
     return await finish_draft(await run_loop(state, deps), deps)
 
 
+TOPICS_PATH = Path(__file__).resolve().parents[2] / "eval" / "data" / "topics.json"
+PERSONAS_DIR = Path(__file__).resolve().parents[1] / "scripts" / "personas"
+
+
+def _load_topics() -> list[str]:
+    if TOPICS_PATH.exists():
+        return json.loads(TOPICS_PATH.read_text(encoding="utf-8"))
+    return ["租房第一年我终于搞清楚的事"]
+
+
+def _load_personas() -> list[PersonaInput]:
+    files = sorted(PERSONAS_DIR.glob("*.json"))
+    return [PersonaInput.model_validate_json(path.read_text(encoding="utf-8")) for path in files]
+
+
+def _swapped_reader(settings: Settings) -> Deps:
+    """把读者的 provider 换成主笔那家：E2 的第二判定器、E3 的 C 组都靠它。"""
+    swapped = settings.model_copy(
+        update={
+            "reader_base_url": settings.writer_base_url,
+            "reader_model": settings.writer_model,
+            "reader_api_key": settings.writer_api_key,
+        }
+    )
+    return Deps(llm=LLMClient(swapped), settings=swapped)
+
+
+def _run_eval(args) -> int:
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.dry_run:
+        bundle = synthetic_bundle()
+    else:
+        settings = Settings.load()
+        deps = Deps(llm=LLMClient(settings), settings=settings)
+        swapped = _swapped_reader(settings)
+        topics = _load_topics()[: args.topics]
+        personas = _load_personas()
+
+        corpus = asyncio.run(build_corpus(topics, deps, personas=personas))
+        e1 = asyncio.run(run_e1(corpus, deps))
+        e2 = asyncio.run(run_e2(corpus, deps, swapped))
+        e3 = {
+            "A": asyncio.run(run_e3(topics[: args.pairs], deps, deps, mode="A", personas=personas)),
+            "B": asyncio.run(run_e3(topics[: args.pairs], deps, deps, mode="B", personas=personas)),
+            "C": asyncio.run(run_e3(topics[: args.pairs], swapped, deps, mode="C", personas=personas)),
+        }
+        host = (settings.reader_base_url or "").split("//")[-1].split("/")[0]
+        bundle = EvalBundle(
+            topics=topics,
+            corpus_n=len(corpus.items),
+            prompt_sha=e1.prompt_sha,
+            writer_model=settings.writer_model,
+            reader_model=settings.reader_model or "",
+            reader_host=host,
+            e1=e1,
+            e2=e2,
+            e3=e3,
+        )
+
+    (out_dir / "report.md").write_text(eval_markdown(bundle), encoding="utf-8")
+    (out_dir / "report.html").write_text(eval_html(bundle), encoding="utf-8")
+    print(f"评测报告已写入：{out_dir / 'report.md'} 与 report.html")
+    return 0
+
+
 def _load_persona(path: str) -> PersonaInput:
     return PersonaInput.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
@@ -111,10 +183,19 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--topic", required=True, help="笔记主题")
     run.add_argument("--trace-out", default=None, help="把过程事件写到这个 JSONL 文件")
 
+    evaluate = sub.add_parser("eval", help="跑 D9 评测（E1 判别力 / E2 一致性 / E3 消融）")
+    evaluate.add_argument("--topics", type=int, default=3, help="E1/E2 用多少个主题")
+    evaluate.add_argument("--pairs", type=int, default=3, help="E3 每组跑多少个主题")
+    evaluate.add_argument("--out", required=True, help="输出目录（写 report.md 与 report.html）")
+    evaluate.add_argument("--dry-run", action="store_true", help="用合成数据渲染报告，不调用任何 API")
+
     report = sub.add_parser("report", help="把 JSONL 事件渲染成单文件 HTML 报告")
     report.add_argument("--trace", required=True, help="run 时写出的 JSONL 路径")
     report.add_argument("--out", required=True, help="输出 HTML 路径")
     args = parser.parse_args(argv)
+
+    if args.command == "eval":
+        return _run_eval(args)
 
     if args.command == "report":
         trace_path = Path(args.trace)

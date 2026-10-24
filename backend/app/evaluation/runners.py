@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
-from app.evaluation.corpus import Corpus, DEFAULT_PERSONA, _state
+from app.evaluation.corpus import DEFAULT_PERSONA, Corpus, _state
 from app.evaluation.judge import Judgement, judge_draft, reader_prompt_sha256
 from app.evaluation.stats import cohens_kappa, kendall_tau_b, ordering_accuracy, spearman_rho
 from app.graph.decisions import ScoreWeights, passed, score
@@ -158,6 +158,7 @@ async def run_e3(
 
     for index, topic in enumerate(topics):
         persona = roster[index % len(roster)]
+        draft: Draft | None = None
 
         if mode == "A":
             result = await deps.llm.structured(
