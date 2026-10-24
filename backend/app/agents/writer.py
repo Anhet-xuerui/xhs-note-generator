@@ -29,7 +29,10 @@ WRITER_SYSTEM = """你是小红书笔记的主笔。
 - 第一轮没有反对意见时，responses 必须是空数组。
 
 输出一个 JSON 对象，形状固定为：
-{"draft": {"title": "...", "body": "...", "tags": ["..."]}, "responses": [{"objection_index": 0, "decision": "accept", "reason": "..."}]}
+{
+  "draft": {"title": "...", "body": "...", "tags": ["..."]},
+  "responses": [{"objection_index": 0, "decision": "accept", "reason": "..."}]
+}
 只输出 JSON。"""
 
 

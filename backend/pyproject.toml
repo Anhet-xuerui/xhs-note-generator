@@ -23,6 +23,8 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 markers = ["live: 需要真实 API（配好 .env 后跑 `uv run pytest -m live`）"]
+# 默认不跑 live：它要打真实 API、会花钱、也慢。显式 `-m live` 才跑。
+addopts = "-m 'not live'"
 
 [tool.ruff]
 line-length = 120

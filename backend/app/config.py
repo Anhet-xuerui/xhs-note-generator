@@ -69,7 +69,9 @@ class Settings(BaseSettings):
 
         读者先校验：它是「换厂商」机制的开关，缺了必须立刻失败。
         """
-        settings = cls(_env_file=_env_file)  # 测试传 None，避免读到开发者本机的 .env
+        # 测试传 None，避免读到开发者本机的 .env。pydantic-settings 运行时支持该参数，
+        # 但类型存根里没有，所以这里显式忽略。
+        settings = cls(_env_file=_env_file)  # type: ignore[call-arg]
         missing_reader = [
             name
             for name, value in (
