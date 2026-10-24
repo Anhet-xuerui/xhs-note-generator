@@ -32,6 +32,11 @@ def _num(value: float | None, digits: int = 2) -> str:
     return "—" if value is None else f"{value:.{digits}f}"
 
 
+def _kappa_ok(value: float | None) -> bool:
+    """§12 的判据是 click 与 save 两个字段的 κ 都要 ≥ 0.6，只查一个会把结论说反。"""
+    return value is not None and value >= 0.6
+
+
 def _verdict_line(name: str, ok: bool) -> str:
     return f"- **{name}**：{'达成' if ok else '未达成'}"
 
@@ -69,7 +74,10 @@ def markdown(bundle: EvalBundle) -> str:
         f"| save 的 Cohen κ | {_num(e2.kappa_save)} | ≥ 0.6 可接受 |",
         f"| score 的 Spearman ρ | {_num(e2.spearman_rho)} | 越接近 1 越好 |",
         "",
-        _verdict_line("两家厂商判定一致（κ ≥ 0.6）", (e2.kappa_click or 0) >= 0.6),
+        _verdict_line(
+            "两家厂商判定一致（click 与 save 的 κ 都 ≥ 0.6）",
+            _kappa_ok(e2.kappa_click) and _kappa_ok(e2.kappa_save),
+        ),
         "",
         "## E3 消融（A 裸模型 / B 七角色 / C 同厂商读者）",
         "",
@@ -162,7 +170,7 @@ def html(bundle: EvalBundle) -> str:
 
 <h2>E2 双厂商一致性</h2>
 {_html_table(["指标", "值", "判据"], e2_rows)}
-{verdict("两家厂商判定一致（κ ≥ 0.6）", (e2.kappa_click or 0) >= 0.6)}
+{verdict("两家厂商判定一致（click 与 save 的 κ 都 ≥ 0.6）", _kappa_ok(e2.kappa_click) and _kappa_ok(e2.kappa_save))}
 
 <h2>E3 消融</h2>
 {_html_table(["组", "配置", "通过率", "平均分", "tokens", "成本(元)", "时延(s)"], e3_rows)}

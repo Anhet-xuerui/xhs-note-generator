@@ -31,3 +31,13 @@ def test_cli_eval_dry_run_writes_both_reports(tmp_path, capsys):
     assert (tmp_path / "report.md").exists()
     assert (tmp_path / "report.html").read_text(encoding="utf-8").startswith("<!doctype html>")
     assert "dry-run" in (tmp_path / "report.md").read_text(encoding="utf-8")
+
+def test_e2_verdict_requires_both_kappas():
+    """§12 判据是 click / save 两个字段的 κ 都要 ≥ 0.6；只查一个会把结论说反。"""
+    from dataclasses import replace
+
+    bundle = synthetic_bundle()
+    half_fail = replace(bundle, e2=replace(bundle.e2, kappa_click=0.83, kappa_save=0.41))
+
+    lines = [line for line in markdown(half_fail).splitlines() if "两家厂商" in line]
+    assert lines and "未达成" in lines[0]
