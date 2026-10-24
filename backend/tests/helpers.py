@@ -28,8 +28,10 @@ class FakeLLM:
         self.queue = list(responses)
         self.roles: list[str] = []
         self.users: list[str] = []
+        self.max_attempts_seen: list[int | None] = []
 
-    async def structured(self, *, role: str, system: str, user: str, schema: type):
+    async def structured(self, *, role: str, system: str, user: str, schema: type, max_attempts=None):
+        self.max_attempts_seen.append(max_attempts)
         self.roles.append(role)
         self.users.append(user)
         item = self.queue.pop(0)
@@ -111,7 +113,10 @@ def make_angles() -> AngleSet:
 def make_writer_output(persona: PersonaInput | None = None) -> WriterOutput:
     """正文里塞进该画像的前两条真实经历——主笔必须用足 real_material。"""
     materials = list((persona or make_persona()).real_material)
-    body = f"{materials[0]}。后来才明白，{materials[1]}这句话是什么意思。"
+    if len(materials) > 1:
+        body = f"{materials[0]}。后来才明白，{materials[1]}这句话是什么意思。"
+    else:
+        body = f"{materials[0]}。那之后我才知道，租房这件事得自己留证据。"
     return WriterOutput(
         draft=Draft(title="租房第三年，我才知道中介不会告诉你的三件事", body=body, tags=["租房", "沪漂"]),
         responses=[],

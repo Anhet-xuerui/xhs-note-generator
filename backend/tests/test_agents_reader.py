@@ -13,7 +13,6 @@ from app.schemas import (
     RunInput,
     Verdict,
 )
-
 from tests.helpers import deps_with
 
 BODY = "第一年我什么都不懂。签约那天中介笑得很热情！后来我才知道隔音是硬伤？"

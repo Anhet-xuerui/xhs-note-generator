@@ -40,6 +40,9 @@ async def run_profile(state: RunState, deps: Deps) -> ProfileCard:
     card.real_material = list(persona.real_material)
     card.taboo = list(persona.taboo)
     card.anchors = [a for a in card.anchors if a in persona.real_material]
+    if not card.anchors:
+        # 模型改写了措辞时会全被过滤掉；留空会让 §8 的保真校验变成永真（评审 I8）。
+        card.anchors = list(persona.real_material[:2])
     for banned in persona.taboo:
         if banned not in card.cannot_say:
             card.cannot_say.append(banned)

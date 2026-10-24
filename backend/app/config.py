@@ -32,6 +32,14 @@ class WriterNotConfigured(ProviderNotConfigured):
     """主笔执行者未配置。"""
 
 
+class UnknownModelPrice(RuntimeError):
+    """价格表里没有这个模型——宁可报错，也不要按 0 计费把成本数字变成假的。"""
+
+    def __init__(self, model: str) -> None:
+        super().__init__(f"模型 {model} 未登记价格：请加进 app/config.py 的 PRICES（含抓取日期）。")
+        self.model = model
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -52,7 +60,7 @@ class Settings(BaseSettings):
     thinking_enabled: bool = False
 
     @classmethod
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         """读取环境变量并校验。
 
         读者先校验：它是「换厂商」机制的开关，缺了必须立刻失败。
@@ -77,4 +85,19 @@ class Settings(BaseSettings):
 
         if not settings.writer_api_key:
             raise WriterNotConfigured("缺少 WRITER_API_KEY，主笔无法调用模型。")
+
+        # 价格必须先登记：否则会在花掉画像官/策划/主笔的钱之后才炸（评审 C2）。
+        if settings.reader_model not in PRICES:
+            raise UnknownModelPrice(settings.reader_model or "")
+
+        # 「换厂商」是机制不是偏好（§13）：同一家同一模型等于没换，E2 会作废。
+        same_vendor = (settings.reader_base_url, settings.reader_model) == (
+            settings.writer_base_url,
+            settings.writer_model,
+        )
+        if same_vendor:
+            raise ReaderNotConfigured(
+                "读者配置与主笔完全相同（同 base_url 同模型），等于没有换厂商；"
+                "§13 要求读者用另一家厂商的模型，请改 READER_BASE_URL / READER_MODEL。"
+            )
         return settings

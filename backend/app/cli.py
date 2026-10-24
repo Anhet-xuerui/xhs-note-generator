@@ -14,10 +14,11 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from app.config import ProviderNotConfigured, Settings
+from app.agents.planner import PlannerContractError
+from app.config import ProviderNotConfigured, Settings, UnknownModelPrice
 from app.graph.decisions import evaluate
 from app.graph.loop import run_loop
-from app.llm.client import Deps, LLMClient
+from app.llm.client import Deps, LLMClient, NodeCallFailed
 from app.schemas import PersonaInput, RunInput, Usage
 from app.state import RunState
 
@@ -50,7 +51,10 @@ def result_payload(state: RunState) -> dict:
     draft = state.get("draft")
     usage = state.get("usage") or Usage()
     verdicts = state.get("verdicts") or []
-    failed_checks = evaluate(verdicts[-1]).failed_checks if verdicts else []
+    best = state.get("best_round")
+    # 未达标项必须描述**交付的那一轮**，不是最后一轮（评审 I3）。
+    judged = verdicts[best - 1] if best and 0 <= best - 1 < len(verdicts) else (verdicts[-1] if verdicts else None)
+    failed_checks = evaluate(judged).failed_checks if judged else []
     return {
         "title": draft.title if draft else None,
         "body": draft.body if draft else None,
@@ -61,6 +65,7 @@ def result_payload(state: RunState) -> dict:
             "rounds_used": len(verdicts),
             "best_round": state.get("best_round"),
             "failed_checks": failed_checks,
+            "degraded_rounds": list(state.get("degraded_rounds") or []),
             "usage": {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
@@ -77,10 +82,9 @@ def _load_persona(path: str) -> PersonaInput:
 
 
 def main(argv: list[str] | None = None) -> int:
-    try:
-        sys.stdout.reconfigure(errors="replace")  # GBK 控制台不至于因中文崩溃
-    except (AttributeError, OSError):
-        pass
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(errors="replace")  # GBK 控制台不至于因中文崩溃
 
     parser = argparse.ArgumentParser(prog="xhs-agent", description="小红书多角色笔记生成")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -104,7 +108,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"配置缺失：{exc}", file=sys.stderr)
         return 1
 
-    state = asyncio.run(run_loop(new_state(persona, args.topic), deps))
+    try:
+        state = asyncio.run(run_loop(new_state(persona, args.topic), deps))
+    except (NodeCallFailed, UnknownModelPrice, PlannerContractError) as exc:
+        # 跑到一半炸了也要给出可读结果，而不是抛出 traceback（评审 C2）。
+        print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2))
+        return 1
+
     print(json.dumps(result_payload(state), ensure_ascii=False, indent=2))
     return 0 if state.get("status") != "failed" else 1
 

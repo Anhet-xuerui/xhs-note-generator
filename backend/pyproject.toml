@@ -25,7 +25,7 @@ testpaths = ["tests"]
 markers = ["live: 需要真实 API（配好 .env 后跑 `uv run pytest -m live`）"]
 
 [tool.ruff]
-line-length = 110
+line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
@@ -35,3 +35,6 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.11"
 ignore_missing_imports = true
 disallow_untyped_defs = false
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]

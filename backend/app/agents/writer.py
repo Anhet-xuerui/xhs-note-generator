@@ -60,6 +60,8 @@ async def run_writer(state: RunState, deps: Deps) -> tuple[Draft, list[WriterRes
     feedback = state.get("feedback_history") or []
     objections = feedback[-1] if feedback else []
     materials = list(state["input"].persona.real_material)
+    # 画像允许只有 1 条素材：目标是「尽量用满」，不能定成达不到的 2 条（评审 I5）。
+    target = min(2, len(materials))
 
     draft: Draft | None = None
     responses: list[WriterResponse] = []
@@ -70,6 +72,7 @@ async def run_writer(state: RunState, deps: Deps) -> tuple[Draft, list[WriterRes
             system=WRITER_SYSTEM,
             user=user,
             schema=WriterOutput,
+            max_attempts=1,  # 节点层已经重出一次，不再叠加 client 的两次预算（评审 I7）
         )
         merge_usage(state, result.usage)
 
@@ -78,13 +81,13 @@ async def run_writer(state: RunState, deps: Deps) -> tuple[Draft, list[WriterRes
         responses = _validate_responses(out.responses, len(objections)) if objections else []
 
         hits = material_hits(out.draft.body, materials)
-        if hits >= 2 or attempt == 2:
+        if hits >= target or attempt == 2:
             draft = out.draft
             break
         user = (
             base_user
             + f"\n\n上一版正文只用到 {hits} 条 real_material。"
-            + "请至少把 2 条真实经历原样写进正文，具体到动作、数字或对话。"
+            + f"请至少把 {target} 条真实经历原样写进正文，具体到动作、数字或对话。"
         )
 
     assert draft is not None  # 两次循环里必然赋值

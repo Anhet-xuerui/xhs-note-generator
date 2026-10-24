@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from app.agents.profile import run_profile
 from app.schemas import PersonaInput, ProfileCard, RunInput
-
 from tests.helpers import deps_with
 
 

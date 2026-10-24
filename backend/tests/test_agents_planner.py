@@ -8,7 +8,6 @@ import pytest
 
 from app.agents.planner import AngleSet, PlannerContractError, run_planner
 from app.schemas import Angle, PersonaInput, ProfileCard, RunInput
-
 from tests.helpers import deps_with
 
 

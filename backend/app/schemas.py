@@ -109,7 +109,7 @@ class Usage:
     calls: int = 0
     elapsed_s: float = 0.0
 
-    def merge(self, other: "Usage") -> "Usage":
+    def merge(self, other: Usage) -> Usage:
         return Usage(
             self.input_tokens + other.input_tokens,
             self.output_tokens + other.output_tokens,

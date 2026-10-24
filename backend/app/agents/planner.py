@@ -59,6 +59,7 @@ async def run_planner(state: RunState, deps: Deps) -> Angle:
             system=PLANNER_SYSTEM,
             user=user,
             schema=AngleSet,
+            max_attempts=1,  # 节点层已重出一次（评审 I7）
         )
         merge_usage(state, result.usage)
         try:

@@ -14,7 +14,6 @@ from app.schemas import (
     RunInput,
     WriterResponse,
 )
-
 from tests.helpers import deps_with
 
 MATERIAL_A = "被二房东坑过一个月押金"

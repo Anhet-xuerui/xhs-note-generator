@@ -45,12 +45,27 @@ async def run_once(state: RunState, deps: Deps) -> RunState:
 
 async def run_loop(state: RunState, deps: Deps) -> RunState:
     """三轮上限内的讨论循环；每轮结尾由 `decide()` 决定继续/换角度/停止。"""
-    for key in ("angle_history", "draft_history", "verdicts", "feedback_history"):
-        state.setdefault(key, [])
+    state.setdefault("angle_history", [])
+    state.setdefault("draft_history", [])
+    state.setdefault("verdicts", [])
+    state.setdefault("feedback_history", [])
+    state.setdefault("degraded_rounds", [])
     state["status"] = "running"
 
-    state["profile"] = await run_profile(state, deps)
-    state["angle"] = await run_planner(state, deps)
+    try:
+        state["profile"] = await run_profile(state, deps)
+    except NodeCallFailed:
+        # §10 没有给画像官降级：没有约束卡就不知道「这个人能说什么」，直接失败。
+        state["status"] = "failed"
+        return state
+
+    try:
+        state["angle"] = await run_planner(state, deps)
+    except NodeCallFailed:
+        # §10：策划失败用兜底值——没有角度就沿用已有角度，实在没有才失败。
+        if state.get("angle") is None:
+            state["status"] = "failed"
+            return state
 
     decision = None
     while True:
@@ -67,19 +82,30 @@ async def run_loop(state: RunState, deps: Deps) -> RunState:
         verdict = await run_reader(state, deps)
         state["feedback_history"].append(list(verdict.objections))
 
-        decision = decide(state["verdicts"], state["angle_history"])
+        # §10：第 1 轮读者就挂了 → 直接走未通过路径，不再白烧两轮（评审 I2）。
+        if state["round"] == 1 and state["degraded_rounds"]:
+            state["status"] = "exhausted"
+            state["best_round"] = 1
+            break
+
+        decision = decide(
+            state["verdicts"], state["angle_history"], degraded_rounds=state["degraded_rounds"]
+        )
         if decision.action == "stop":
             break
         if decision.action == "new_angle":
             # 重开角度最多一次：旧角度也进 history，len(history) 到 2 就锁死（§7）。
-            state["angle_history"].append(state["angle"])
-            state["angle"] = await run_planner(state, deps)
-            state["angle_history"].append(state["angle"])
+            previous = state.get("angle")
+            if previous is not None:
+                state["angle_history"].append(previous)
+            reopened = await run_planner(state, deps)
+            state["angle"] = reopened
+            state["angle_history"].append(reopened)
 
-    assert decision is not None
-    state["status"] = decision.status
-    state["best_round"] = decision.best_round
-    if decision.best_round is not None:
+    if decision is not None:
+        state["status"] = decision.status
+        state["best_round"] = decision.best_round
+    if state["best_round"] is not None:
         # 未通过时交分数最高那一版，不是最后一版（§7）。
-        state["draft"] = state["draft_history"][decision.best_round - 1]
+        state["draft"] = state["draft_history"][state["best_round"] - 1]
     return state

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from openai import APIConnectionError, AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
-from app.config import PRICES, Settings
+from app.config import PRICES, Settings, UnknownModelPrice
 from app.schemas import Usage
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -31,21 +31,18 @@ _FENCE_RE = re.compile(r"^```[a-zA-Z0-9_-]*\s*|\s*```$")
 
 
 class NodeCallFailed(RuntimeError):
-    """节点调用两次仍失败。"""
+    """节点调用失败。**必须带上已花掉的用量**，否则成本会被系统性低估（评审 C1）。"""
 
-    def __init__(self, role: str, attempts: int, last_error: BaseException) -> None:
+    def __init__(self, role: str, attempts: int, last_error: BaseException, usage: Usage | None = None) -> None:
         super().__init__(f"节点 {role} 调用失败（{attempts} 次尝试）：{last_error}")
         self.role = role
         self.attempts = attempts
         self.last_error = last_error
+        self.usage = usage or Usage()
 
 
-class UnknownModelPrice(RuntimeError):
-    """价格表里没有这个模型——宁可报错，也不要按 0 计费把成本数字变成假的。"""
-
-    def __init__(self, model: str) -> None:
-        super().__init__(f"模型 {model} 未登记价格：请加进 app/config.py 的 PRICES（含抓取日期）。")
-        self.model = model
+class MissingUsage(RuntimeError):
+    """响应缺少 usage：计费无从计算，宁可报错也不按 0 记。"""
 
 
 @dataclass(slots=True)
@@ -60,7 +57,7 @@ class CallResult(Generic[TModel]):
 class Deps:
     """节点依赖集合：所有 agent 只吃这个，不自己读环境变量。"""
 
-    llm: "LLMClient"
+    llm: LLMClient
     settings: Settings
 
 
@@ -74,7 +71,7 @@ def extract_json(text: str) -> str:
 
 
 class LLMClient:
-    def __init__(self, settings: Settings, *, http_client: "httpx2.AsyncClient | None" = None) -> None:
+    def __init__(self, settings: Settings, *, http_client: httpx2.AsyncClient | None = None) -> None:
         self._settings = settings
         self._http = http_client
         self._clients: dict[str, AsyncOpenAI] = {}
@@ -95,7 +92,9 @@ class LLMClient:
         )
 
     def _client(self, base_url: str, api_key: str) -> AsyncOpenAI:
-        client = self._clients.get(base_url)
+        # 按 (base_url, api_key) 缓存：同一 base_url 下读者与主笔 key 不同时必须各用各的。
+        key = f"{base_url}|{api_key}"
+        client = self._clients.get(key)
         if client is None:
             client = AsyncOpenAI(
                 base_url=base_url,
@@ -104,7 +103,7 @@ class LLMClient:
                 max_retries=0,  # 重试由本层统一管，SDK 自己重试会让 attempts 失真
                 http_client=self._http,
             )
-            self._clients[base_url] = client
+            self._clients[key] = client
         return client
 
     # -- 计费 ---------------------------------------------------------------
@@ -129,6 +128,7 @@ class LLMClient:
         system: str,
         user: str,
         schema: type[TModel],
+        max_attempts: int | None = None,
     ) -> CallResult[TModel]:
         base_url, api_key, model = self._provider(role)
         self._price(model)  # 未登记价格：在花钱之前就失败
@@ -151,10 +151,10 @@ class LLMClient:
 
         usage = Usage()
         started = time.perf_counter()
-        max_attempts = 1 + max(0, self._settings.max_retries)
+        budget = max_attempts if max_attempts is not None else 1 + max(0, self._settings.max_retries)
         last_error: BaseException | None = None
 
-        for attempt in range(1, max_attempts + 1):
+        for attempt in range(1, budget + 1):
             try:
                 response = await client.chat.completions.create(**request)
                 usage.calls += 1
@@ -189,11 +189,11 @@ class LLMClient:
 
         usage.elapsed_s = time.perf_counter() - started
         usage.cost_cny = self._cost_cny(model, usage.input_tokens, usage.output_tokens)
-        raise NodeCallFailed(role, max_attempts, last_error or RuntimeError("未知失败"))
+        raise NodeCallFailed(role, budget, last_error or RuntimeError("未知失败"), usage=usage)
 
     @staticmethod
     def _accumulate(usage: Usage, raw: Any) -> None:
         if raw is None:
-            return
+            raise MissingUsage("响应里没有 usage 字段，无法计费；请检查 provider 是否兼容 OpenAI 协议。")
         usage.input_tokens += getattr(raw, "prompt_tokens", 0) or 0
         usage.output_tokens += getattr(raw, "completion_tokens", 0) or 0

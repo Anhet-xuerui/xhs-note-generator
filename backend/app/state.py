@@ -39,6 +39,7 @@ class RunState(TypedDict, total=False):
     usage: Usage
     gate: Any | None
     reading_scene: str
+    degraded_rounds: list[int]
 
 
 def merge_usage(state: RunState, usage: Usage) -> Usage:

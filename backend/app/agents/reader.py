@@ -96,7 +96,10 @@ async def run_reader(state: RunState, deps: Deps) -> Verdict:
             user=render_reader_prompt(context),
             schema=Verdict,
         )
-    except NodeCallFailed:
+    except NodeCallFailed as exc:
+        # 失败的那几次调用也花了钱，必须并进用量，否则成本被系统性低估（评审 C1）。
+        merge_usage(state, exc.usage)
+        state.setdefault("degraded_rounds", []).append(state.get("round", 1))
         history = state.get("verdicts") or []
         # 降级：沿用上一轮判定；第 1 轮就失败则按未通过路径走（§10）。
         fallback = history[-1] if history else _fallback_verdict()

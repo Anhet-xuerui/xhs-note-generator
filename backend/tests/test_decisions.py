@@ -86,13 +86,13 @@ def test_pick_best_round_prefers_higher_score_and_later_on_tie():
 
 
 def test_decide_stops_on_max_rounds_with_best_round():
-    verdicts = [v(click=True, read_through=0.4), v(click=True, read_through=0.8), v(click=False, read_through=0.2)]
+    verdicts = [v(click=True, read_through=0.4), v(click=True, read_through=0.8), v(click=True, read_through=1.0)]
 
     decision = decide(verdicts, [])
 
     assert decision.action == "stop"
     assert decision.stop_reason == "max_rounds"
-    assert decision.best_round == 2
+    assert decision.best_round == 3
     assert len(verdicts) == MAX_ROUNDS
 
 

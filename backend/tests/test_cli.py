@@ -7,7 +7,6 @@ from pathlib import Path
 
 import app.cli as cli
 from app.schemas import PersonaInput, Verdict, WriterResponse
-
 from tests.helpers import deps_with, make_angles, make_card, make_writer_output
 
 PERSONA = Path(__file__).resolve().parents[1] / "scripts" / "personas" / "p01.json"

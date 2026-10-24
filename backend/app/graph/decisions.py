@@ -34,7 +34,7 @@ class ScoreWeights:
     read_through: float = 2.0
     blocking: float = -0.5
 
-    def scaled(self, factor: float) -> "ScoreWeights":
+    def scaled(self, factor: float) -> ScoreWeights:
         return replace(
             self,
             click=self.click * factor,
@@ -129,12 +129,16 @@ def verdicts_identical(a: Verdict, b: Verdict) -> bool:
 
 
 def detect_stuck(verdicts: list[Verdict], weights: ScoreWeights = DEFAULT_WEIGHTS) -> StopReason | None:
-    """两级卡死检测。一级在实践中几乎不成立，二级才是实际生效的那个（§7）。"""
+    """两级卡死检测。
+
+    一级（判定卡完全相同）在实践中几乎不成立；二级（分数比上一轮没涨）才是实际生效的，
+    因此它必须在**第 2 轮**就能触发，否则 3 轮上限下它永远只是在重复「轮次用尽」。
+    """
     if len(verdicts) >= 2 and verdicts_identical(verdicts[-1], verdicts[-2]):
         return "stuck_repeat"
-    if len(verdicts) >= 3:
+    if len(verdicts) >= 2:
         scores = [score(v, weights) for v in verdicts]
-        if scores[-1] - scores[-2] <= 0 and scores[-2] - scores[-3] <= 0:
+        if scores[-1] - scores[-2] <= 0:
             return "stuck_no_gain"
     return None
 
@@ -155,12 +159,22 @@ def round_cap_reached(round_no: int) -> bool:
     return round_no >= MAX_ROUNDS
 
 
-def pick_best_round(verdicts: list[Verdict], weights: ScoreWeights = DEFAULT_WEIGHTS) -> int:
-    """最高分那一轮（1-based）；同分取更晚一轮——它已吸收前面的意见。"""
-    best_index = 0
-    best_score = score(verdicts[0], weights)
-    for i, verdict in enumerate(verdicts[1:], start=1):
-        current = score(verdict, weights)
+def pick_best_round(
+    verdicts: list[Verdict],
+    weights: ScoreWeights = DEFAULT_WEIGHTS,
+    degraded_rounds: list[int] | None = None,
+) -> int:
+    """最高分那一轮（1-based）；同分取更晚一轮——它已吸收前面的意见。
+
+    降级轮（读者挂了、沿用上一轮判定）不参评：那一轮的稿子根本没被读过，
+    交它等于把未评审的稿子当最佳版（评审 I1）。全都降级时退回全量比。
+    """
+    degraded = set(degraded_rounds or [])
+    candidates = [i for i in range(len(verdicts)) if (i + 1) not in degraded] or list(range(len(verdicts)))
+    best_index = candidates[0]
+    best_score = score(verdicts[best_index], weights)
+    for i in candidates[1:]:
+        current = score(verdicts[i], weights)
         if current >= best_score:
             best_index, best_score = i, current
     return best_index + 1
@@ -170,6 +184,7 @@ def decide(
     verdicts: list[Verdict],
     angle_history: list,
     weights: ScoreWeights = DEFAULT_WEIGHTS,
+    degraded_rounds: list[int] | None = None,
 ) -> LoopDecision:
     """判定顺序：通过 → 一级卡死 → 二级卡死 → 轮次上限 → 角度重开 → 继续。"""
     if not verdicts:
@@ -182,15 +197,29 @@ def decide(
         return LoopDecision("stop", "passed", "passed", None, evaluation)
 
     stuck = detect_stuck(verdicts, weights)
+    wants_new_angle = needs_new_angle(round_no, last, angle_history)
+    # 分数没涨但问题集中在开头三句时，先把设计好的那次角度重开跑完再判卡死（§7）。
+    if stuck == "stuck_no_gain" and wants_new_angle:
+        stuck = None
     if stuck is not None:
-        return LoopDecision("stop", "exhausted", stuck, pick_best_round(verdicts, weights), evaluation)
+        return LoopDecision(
+            "stop", "exhausted", stuck, pick_best_round(verdicts, weights, degraded_rounds), evaluation
+        )
 
     if round_cap_reached(round_no):
         return LoopDecision(
-            "stop", "exhausted", "max_rounds", pick_best_round(verdicts, weights), evaluation
+            "stop",
+            "exhausted",
+            "max_rounds",
+            pick_best_round(verdicts, weights, degraded_rounds),
+            evaluation,
         )
 
-    if needs_new_angle(round_no, last, angle_history):
-        return LoopDecision("new_angle", "running", None, pick_best_round(verdicts, weights), evaluation)
+    if wants_new_angle:
+        return LoopDecision(
+            "new_angle", "running", None, pick_best_round(verdicts, weights, degraded_rounds), evaluation
+        )
 
-    return LoopDecision("continue", "running", None, pick_best_round(verdicts, weights), evaluation)
+    return LoopDecision(
+        "continue", "running", None, pick_best_round(verdicts, weights, degraded_rounds), evaluation
+    )
