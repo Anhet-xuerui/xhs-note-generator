@@ -44,3 +44,4 @@ disallow_untyped_defs = false
 "tests/*" = ["E501"]
 # 内联 CSS 长行不值当拆
 "app/report/html.py" = ["E501"]
+"app/evaluation/report.py" = ["E501"]
