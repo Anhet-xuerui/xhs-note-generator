@@ -118,6 +118,28 @@ class SmellReport(BaseModel):
     hits: list[SmellHit] = Field(default_factory=list)
 
 
+class ChangeLog(BaseModel):
+    """一处改写：改了什么、为什么改。被回退时也保留，供前端展示「想改但被拦下了」。"""
+
+    before: str
+    after: str
+    category: str
+    reason: str
+
+
+class HumanizedDraft(BaseModel):
+    """人味校订的产物。fidelity=reverted 时正文是**改写前**的版本（§8）。"""
+
+    title: str
+    cover_text: str | None = None
+    body: str
+    tags: list[str] = Field(default_factory=list)
+    smell_before: int = Field(ge=0, le=100)
+    smell_after: int = Field(ge=0, le=100)
+    changes: list[ChangeLog] = Field(default_factory=list)
+    fidelity: Literal["passed", "reverted", "skipped"]
+
+
 class RunInput(BaseModel):
     persona: PersonaInput
     topic: str = Field(min_length=1)

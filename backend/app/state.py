@@ -11,9 +11,11 @@ from typing import Any, Literal, TypedDict
 from app.schemas import (
     Angle,
     Draft,
+    HumanizedDraft,
     Objection,
     ProfileCard,
     RunInput,
+    SmellReport,
     Usage,
     Verdict,
     WriterResponse,
@@ -40,6 +42,8 @@ class RunState(TypedDict, total=False):
     gate: Any | None
     reading_scene: str
     degraded_rounds: list[int]
+    humanized: HumanizedDraft | None
+    smell: SmellReport | None
 
 
 def merge_usage(state: RunState, usage: Usage) -> Usage:
