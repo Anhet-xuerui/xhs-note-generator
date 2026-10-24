@@ -30,3 +30,6 @@ eval/out/
 Thumbs.db
 .idea/
 .vscode/
+
+# 评测产物
+eval/out/
