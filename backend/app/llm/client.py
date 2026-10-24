@@ -20,6 +20,7 @@ from openai import APIConnectionError, AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
 from app.config import PRICES, Settings
+from app.schemas import Usage
 
 if TYPE_CHECKING:  # pragma: no cover
     import httpx2
@@ -45,17 +46,6 @@ class UnknownModelPrice(RuntimeError):
     def __init__(self, model: str) -> None:
         super().__init__(f"模型 {model} 未登记价格：请加进 app/config.py 的 PRICES（含抓取日期）。")
         self.model = model
-
-
-@dataclass(slots=True)
-class Usage:
-    """累计用量。字段名与顺序在 Task 3 换成 pydantic 版时必须保持一致。"""
-
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cost_cny: float = 0.0
-    calls: int = 0
-    elapsed_s: float = 0.0
 
 
 @dataclass(slots=True)

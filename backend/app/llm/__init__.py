@@ -6,9 +6,9 @@ from app.llm.client import (
     LLMClient,
     NodeCallFailed,
     UnknownModelPrice,
-    Usage,
     extract_json,
 )
+from app.schemas import Usage
 
 __all__ = [
     "CallResult",
