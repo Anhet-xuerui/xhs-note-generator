@@ -16,7 +16,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # 换模型或厂商调价时改这里，并在注释里更新日期与出处。
 PRICES: dict[str, tuple[float, float]] = {
     "deepseek-flash": (0.30, 1.20),
+    "deepseek-v4.1-flash": (0.30, 1.20),   # 与 deepseek-flash 同一模型的不同别名（官方定价页）
     "deepseek-v4-pro": (1.32, 3.96),
+    # 未核实：智谱 GLM flash 档的保守上界，只影响成本显示与预算判断，不影响 token 统计。
+    # 核实后请按官方定价页改正，并更新这一行的日期。
+    "glm-5.3-flash": (0.50, 0.50),
 }
 
 
@@ -60,12 +64,12 @@ class Settings(BaseSettings):
     thinking_enabled: bool = False
 
     @classmethod
-    def load(cls) -> Settings:
+    def load(cls, *, _env_file: str | None = ".env") -> Settings:
         """读取环境变量并校验。
 
         读者先校验：它是「换厂商」机制的开关，缺了必须立刻失败。
         """
-        settings = cls()
+        settings = cls(_env_file=_env_file)  # 测试传 None，避免读到开发者本机的 .env
         missing_reader = [
             name
             for name, value in (

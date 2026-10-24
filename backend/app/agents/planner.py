@@ -23,7 +23,8 @@ PLANNER_SYSTEM = """你是小红书笔记的策划。
 - target_emotion：读者被击中的那种情绪，只能取 焦虑/爽感/共鸣/好奇/实用 之一。
 - title_candidates：每个角度给 2–3 个标题，标题要具体，不要抽象形容词。
 - chosen：三个里**恰好一个**为 true。
-- why_not_others：说清另外两个为什么不选（差异不够、太泛、太像广告……），不得留空。
+- why_not_others：**每个角度都要写**。选中的写清它凭什么赢，未选中的写清它为什么落选
+  （差异不够、太泛、太像广告……）。三条合起来就是「为什么不选另外两个」，一条都不许留空。
 - 三个角度必须真的不同：换的是切入方向，不是换个说法。
 
 只输出 JSON。"""
@@ -41,10 +42,12 @@ def _validate(payload: AngleSet) -> Angle:
     chosen = [a for a in payload.angles if a.chosen]
     if len(chosen) != 1:
         raise PlannerContractError(f"必须恰好一个角度 chosen=True，实际 {len(chosen)} 个")
-    angle = chosen[0]
-    if not angle.why_not_others.strip():
-        raise PlannerContractError("chosen 的角度必须写清 why_not_others，不得留空")
-    return angle
+    # 真实模型把「为什么不选另外两个」写在**落选**的角度上（各自说明落选理由），
+    # 这只是一种更自然的写法，不该判违约；契约只要求每条都写了理由。
+    for index, angle in enumerate(payload.angles):
+        if not angle.why_not_others.strip():
+            raise PlannerContractError(f"第 {index} 个角度没有写 why_not_others")
+    return chosen[0]
 
 
 async def run_planner(state: RunState, deps: Deps) -> Angle:
@@ -69,7 +72,7 @@ async def run_planner(state: RunState, deps: Deps) -> Angle:
             user = (
                 base_user
                 + f"\n\n上一次的输出违反了契约：{exc}。"
-                + "请重出一条：三个角度里恰好一个 chosen=true，且该角度的 why_not_others 非空。"
+                + "请重出一条：三个角度里恰好一个 chosen=true，且每个角度的 why_not_others 都非空。"
             )
             continue
         state["angle"] = angle

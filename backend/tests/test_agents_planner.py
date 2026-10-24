@@ -63,7 +63,8 @@ async def test_rejects_two_chosen():
 
 async def test_rejects_empty_why_not_others():
     state = make_state()
-    payload = AngleSet(angles=[angle("a", chosen=True, why=""), angle("b"), angle("c")])
+    # 落选角度漏写理由同样违约：三条理由合起来才是「为什么不选另外两个」
+    payload = AngleSet(angles=[angle("a", chosen=True), angle("b", why=""), angle("c")])
 
     with pytest.raises(PlannerContractError, match="why_not_others"):
         await run_planner(state, deps_with(payload, payload))

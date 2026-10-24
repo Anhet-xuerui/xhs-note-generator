@@ -7,12 +7,12 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 
 from app.cli import build_deps, new_state
+from app.config import Settings
 from app.graph.loop import run_loop
 from app.schemas import PersonaInput
 
@@ -20,8 +20,17 @@ PERSONA = Path(__file__).resolve().parents[1] / "scripts" / "personas" / "p01.js
 
 pytestmark = pytest.mark.live
 
+def _live_config_ready() -> bool:
+    """配置来源是 .env（不是进程环境变量），所以用 Settings.load() 判断。"""
+    try:
+        Settings.load()
+    except Exception:  # noqa: BLE001 - 任何配置问题都视为「还没准备好」
+        return False
+    return True
+
+
 requires_keys = pytest.mark.skipif(
-    not (os.getenv("WRITER_API_KEY") and os.getenv("READER_API_KEY")),
+    not _live_config_ready(),
     reason="需要真实 API：配好 .env 后跑 `uv run pytest -m live`",
 )
 

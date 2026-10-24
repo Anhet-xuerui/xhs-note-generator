@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.context import build_writer_context
 from app.llm.client import Deps
@@ -19,7 +19,7 @@ from app.state import RunState, merge_usage
 
 WRITER_SYSTEM = """你是小红书笔记的主笔。
 
-按给定的约束卡、选定角度和上一轮读者意见写一版完整笔记，输出 title / body / tags。
+按给定的约束卡、选定角度和上一轮读者意见写一版完整笔记。
 - 用足 real_material：至少把两条真实经历写进正文，具体到动作、数字、地点或对话，
   不要抽象成「很崩溃」「学到了很多」。
 - 语气照 tone；不能碰 cannot_say 里的任何一条。
@@ -28,12 +28,23 @@ WRITER_SYSTEM = """你是小红书笔记的主笔。
   decision 取 accept（照改）或 reject（不改，但说清为什么读者多虑了）。
 - 第一轮没有反对意见时，responses 必须是空数组。
 
+输出一个 JSON 对象，形状固定为：
+{"draft": {"title": "...", "body": "...", "tags": ["..."]}, "responses": [{"objection_index": 0, "decision": "accept", "reason": "..."}]}
 只输出 JSON。"""
 
 
 class WriterOutput(BaseModel):
     draft: Draft
     responses: list[WriterResponse]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_flat_draft(cls, data):
+        """真实模型常把 title/body/tags 平铺在顶层；prompt 已要求嵌套，但这里也接住。"""
+        if isinstance(data, dict) and "draft" not in data and "title" in data:
+            nested = {k: data[k] for k in ("title", "body", "tags", "cover_text") if k in data}
+            return {"draft": nested, "responses": data.get("responses", [])}
+        return data
 
 
 class WriterContractError(RuntimeError):

@@ -22,7 +22,7 @@ def test_reader_provider_must_be_explicit(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
     with pytest.raises(ReaderNotConfigured, match="READER_"):
-        Settings.load()
+        Settings.load(_env_file=None)
 
 
 def test_price_table_is_structured():

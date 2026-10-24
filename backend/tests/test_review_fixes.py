@@ -96,10 +96,8 @@ async def test_reader_model_must_be_priced(monkeypatch):
         "READER_MODEL": "not-in-prices",
     }.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setattr(Settings, "model_config", {**Settings.model_config, "env_file": None})
-
     with pytest.raises(UnknownModelPrice, match="not-in-prices"):
-        Settings.load()
+        Settings.load(_env_file=None)
 
 
 def test_reader_must_not_be_the_same_provider(monkeypatch):
@@ -112,10 +110,8 @@ def test_reader_must_not_be_the_same_provider(monkeypatch):
         "READER_MODEL": "deepseek-flash",
     }.items():
         monkeypatch.setenv(name, value)
-    monkeypatch.setattr(Settings, "model_config", {**Settings.model_config, "env_file": None})
-
     with pytest.raises(ReaderNotConfigured, match="厂商"):
-        Settings.load()
+        Settings.load(_env_file=None)
 
 
 # --- I1/I2：降级判定卡不参与「最佳轮」，且第一轮就失败直接收工 -------------
