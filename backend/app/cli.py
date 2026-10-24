@@ -19,6 +19,8 @@ from app.config import ProviderNotConfigured, Settings, UnknownModelPrice
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
+from app.report.html import render_report
+from app.report.trace import append_event, build_trace, read_events
 from app.schemas import PersonaInput, RunInput, Usage
 from app.state import RunState
 
@@ -107,7 +109,28 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="跑一次生成")
     run.add_argument("--persona", required=True, help="画像 JSON 文件路径")
     run.add_argument("--topic", required=True, help="笔记主题")
+    run.add_argument("--trace-out", default=None, help="把过程事件写到这个 JSONL 文件")
+
+    report = sub.add_parser("report", help="把 JSONL 事件渲染成单文件 HTML 报告")
+    report.add_argument("--trace", required=True, help="run 时写出的 JSONL 路径")
+    report.add_argument("--out", required=True, help="输出 HTML 路径")
     args = parser.parse_args(argv)
+
+    if args.command == "report":
+        trace_path = Path(args.trace)
+        events = read_events(trace_path)
+        if not events:
+            print(f"读不到事件：{trace_path}", file=sys.stderr)
+            return 1
+        result = next(
+            (event.get("data") or {} for event in reversed(events) if event.get("event") == "result"),
+            {},
+        )
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(render_report(events, result), encoding="utf-8")
+        print(f"报告已写入：{out_path}")
+        return 0
 
     try:
         persona = _load_persona(args.persona)
@@ -131,7 +154,13 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2))
         return 1
 
-    print(json.dumps(result_payload(state), ensure_ascii=False, indent=2))
+    payload = result_payload(state)
+    if args.trace_out:
+        trace_path = Path(args.trace_out)
+        for event in build_trace(state, payload):
+            append_event(trace_path, event)
+        payload["meta"]["trace"] = str(trace_path)
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if state.get("status") != "failed" else 1
 
 

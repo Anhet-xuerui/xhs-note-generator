@@ -42,3 +42,5 @@ disallow_untyped_defs = false
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["E501"]
+# 内联 CSS 长行不值当拆
+"app/report/html.py" = ["E501"]
