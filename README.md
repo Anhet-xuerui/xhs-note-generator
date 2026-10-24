@@ -1,0 +1,110 @@
+# 小红书多角色笔记生成
+
+七个角色在一个受控的讨论循环里互相挑刺，产出一篇能直接发的小红书图文笔记（标题 / 封面文案 / 正文 / 标签）；
+同时把「多角色到底比单次生成好在哪、值不值这个成本」做成可复现的实验。
+
+**为什么值得看**：这个项目的重点不是「用 LangGraph 串了七个 prompt」，而是两样更稀缺的东西——
+一组**结构化的判定信号**（判定卡 + 判别力与一致性验证），和一组**敢给负面结论的消融实验**。
+
+| 当前状态 | |
+|---|---|
+| 测试 | 133 passed（离线，约 2 秒） |
+| 质量门 | `ruff` 0 / `mypy` 0（33 模块） |
+| 冻结契约 | `xhs-invariants` 6/6（信息隔离 / schema 冻结 / 轮次上限 / 单一评分口径 / 不采集平台数据） |
+| 一次真实运行 | 8 次调用、**0.037 元**、35 秒 |
+| 过程报告 | [单文件 HTML 样本](docs/samples/report-p01.html)（双击即开，无外部依赖） |
+
+> 录屏还没有（D8 的事）。在那之前，[报告样本](docs/samples/report-p01.html)承担「点开就能看到过程」的角色：
+> 判定卡第几句划走、AI 味 62→28 被删了哪些词、守门人命中项标红，全在里面。
+
+## 三条关键设计
+
+**1. 信息隔离：七个角色不能看到同一段 context**
+
+| 隔离 | 做法 | 不这么做会怎样 |
+|---|---|---|
+| 读者看不到 `real_material` | `context.py` 白名单裁剪 | 它会替作者打同情分，「像不像真人」变成「作者是不是真经历过」 |
+| 策划看不到成稿 | 只给约束卡 + 上一轮判定卡 | 看到稿子它就开始替稿子辩护——模型最稳定的行为之一 |
+| 主笔看不到规则库全文 | 只给守门人的具体命中项 | 为了绕规则把句子写得又长又空 |
+
+这不是文档里的君子协定：`build_reader_context` / `build_planner_context` / `build_writer_context` 是唯一入口，
+有单测断言三条隔离，`xhs-invariants` 的 C3 还会在 CI 里再查一遍。
+
+**2. 读者换一家厂商**
+
+写作用 DeepSeek，读者用 GLM。代码里是真的两个 provider，不是两个 temperature：
+`READER_*` 缺失时启动即报错，与主笔「同 base_url 同模型」也会被拒绝（否则 E2 直接作废）。
+客户端的连接缓存按 `(base_url, api_key)` 维度，避免两家共用一个 base_url 时串了 key。
+
+**3. 规则先筛，模型后改**
+
+AI 味检测和违禁词都是**程序化规则**，模型只做两件事：按命中项改写、判断命中是不是误报。
+「最 / 第一」这类词误报极多（最后、第一次），这正是守门人值得存在的那一半工作——
+纯正则做不了，纯模型不可靠。
+
+## 评测结果
+
+> 三个实验的完整报告：[markdown](docs/samples/eval-report-pilot.md) / [HTML](docs/samples/eval-report-pilot.html)。
+> 判据与实验设计见 [设计文档 §12](docs/superpowers/specs/2026-10-23-xhs-multiagent-design.md)。
+
+<!--EVAL-TABLE-->
+
+评测口径：三组成稿都由**同一个读者实例**事后打分；A 组没有 `Verdict`，它的评分调用成本单列。
+每次跑评测记录读者 prompt 的 sha256 指纹与模型名——否则「你改过 prompt 之后还叫同一组数据吗」答不上来。
+
+## 怎么跑
+
+```bash
+cd backend
+cp .env.example .env          # 填两组 key：写作侧 + 读者侧（必须不同厂商）
+uv sync
+
+# 跑一次生成（约 35 秒、约 0.04 元）
+uv run python -m app.cli run --persona scripts/personas/p01.json \
+  --topic "租房第一年我终于搞清楚的事" --trace-out data/traces/r1.jsonl
+
+# 渲染单文件过程报告
+uv run python -m app.cli report --trace data/traces/r1.jsonl --out data/report.html
+
+# 评测（--dry-run 不花钱）
+uv run python -m app.cli eval --dry-run --out ../eval/out
+uv run python -m app.cli eval --topics 10 --pairs 10 --out ../eval/out
+
+# 测试
+uv run pytest -q
+```
+
+没有任何外网依赖：所有单测用 `httpx2.MockTransport` 伪造 OpenAI 兼容响应，跑测试不花钱。
+
+## 局限
+
+这类项目最容易在「局限」一节露怯，所以先说清楚：
+
+- **没有真实互动数据。** 判定器的有效性只有内部验证（判别力 + 一致性），**不能**证明它等同于真实用户。
+- **`bad` 档是构造出来的**（反向 prompt），它定义的是「我们能想到的 AI 味」，不是全部 AI 味。
+- **标签级、选题级效果未验证**；赛道不固定，因此没有赛道专属规则与样本库。
+- **轮次上限 3 是拍的**，没有做「为什么不是 2 或 5」的实验。
+- 本轮**没有人工盲评**（E4），报告里已标明「无人工信号」。
+- 本项目本地运行，没有公网部署；面试官点不开 demo，用报告 + 录屏（待补）补偿。
+
+## 结构
+
+```
+backend/app/
+├── agents/        # 七个角色：画像官 / 策划 / 主笔 / 读者 / 封面 / 人味校订 / 守门人
+├── context.py     # 信息隔离的唯一实现处（白名单裁剪）
+├── graph/         # 讨论循环（while + 纯函数判定）、退出条件、卡死检测
+├── humanize/      # AI 味检测器（六类规则）、事实保真四条
+├── rules/         # 违禁词 YAML + 正则引擎
+├── evaluation/    # E1/E2/E3、手写统计、评测报告
+├── report/        # JSONL 事件 + 单文件 HTML 报告
+└── llm/           # 结构化调用：围栏剥离 / 校验失败重问 / 逐调用计费
+```
+
+决策与取舍：[D1–D3](docs/decisions/2026-10-24-d1-d3-rulings.md) ·
+[D4](docs/decisions/2026-10-24-d4-rulings.md) · [D9](docs/decisions/2026-10-24-d9-rulings.md)
+
+## 还没做
+
+LangGraph 化的编排与 checkpointer（D5）、Vue 前端（D6）、docker 一键启动（D8）、录屏（D8）、人工盲评（E4）。
+现在的编排是手写 `while` + 纯函数判定，每个退出条件都能被单测直接命中；换成 LangGraph 属于重构而非新增能力。
