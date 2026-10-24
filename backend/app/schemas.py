@@ -94,6 +94,30 @@ class WriterResponse(BaseModel):
     reason: str
 
 
+SmellCategory = Literal[
+    "abstract_noun",
+    "idiom_density",
+    "ai_pattern",
+    "uniform_paragraph",
+    "no_anchor",
+    "emoji_rhythm",
+]
+
+
+class SmellHit(BaseModel):
+    """一类 AI 味命中（§8）。spans 是 Python 字符下标，不是字节。"""
+
+    category: SmellCategory
+    spans: list[tuple[int, int]] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+    penalty: float
+
+
+class SmellReport(BaseModel):
+    score: int = Field(ge=0, le=100, description="0–100，越高越像 AI")
+    hits: list[SmellHit] = Field(default_factory=list)
+
+
 class RunInput(BaseModel):
     persona: PersonaInput
     topic: str = Field(min_length=1)
