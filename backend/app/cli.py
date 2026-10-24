@@ -15,6 +15,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.config import ProviderNotConfigured, Settings
+from app.graph.decisions import evaluate
 from app.graph.loop import run_loop
 from app.llm.client import Deps, LLMClient
 from app.schemas import PersonaInput, RunInput, Usage
@@ -48,6 +49,8 @@ def new_state(persona: PersonaInput, topic: str) -> RunState:
 def result_payload(state: RunState) -> dict:
     draft = state.get("draft")
     usage = state.get("usage") or Usage()
+    verdicts = state.get("verdicts") or []
+    failed_checks = evaluate(verdicts[-1]).failed_checks if verdicts else []
     return {
         "title": draft.title if draft else None,
         "body": draft.body if draft else None,
@@ -55,8 +58,9 @@ def result_payload(state: RunState) -> dict:
         "status": state.get("status"),
         "meta": {
             "run_id": state.get("run_id"),
-            "rounds_used": len(state.get("verdicts") or []),
+            "rounds_used": len(verdicts),
             "best_round": state.get("best_round"),
+            "failed_checks": failed_checks,
             "usage": {
                 "input_tokens": usage.input_tokens,
                 "output_tokens": usage.output_tokens,
