@@ -33,3 +33,7 @@ Thumbs.db
 
 # 评测产物
 eval/out/
+
+# pytest 临时目录（有时会落在 backend/ 下）
+pytest-of-*/
+
