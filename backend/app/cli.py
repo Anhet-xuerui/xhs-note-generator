@@ -173,11 +173,11 @@ def _metrics(bundle: EvalBundle) -> dict[str, float]:
     return {key: value for key, value in rows.items() if value is not None}
 
 
-def _ci_rows(bundles: list[EvalBundle]) -> list[tuple[str, str]]:
-    keys = [key for key in _metrics(bundles[0]) if all(key in _metrics(b) for b in bundles)]
+def _ci_rows(metrics_all: list[dict[str, float]]) -> list[tuple[str, str]]:
+    keys = [key for key in metrics_all[0] if all(key in item for item in metrics_all)]
     rows: list[tuple[str, str]] = []
     for key in keys:
-        summary = summarize([_metrics(b)[key] for b in bundles])
+        summary = summarize([item[key] for item in metrics_all])
         value = summary.pct() if key.endswith("率") or "κ" in key or "ρ" in key or "τ" in key else summary.label(2)
         rows.append((key, value))
     return rows
@@ -191,15 +191,32 @@ async def _evaluate(args) -> EvalBundle:
     topics = _load_topics()[: args.topics]
     personas = _load_personas()
 
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
     repeats = max(1, args.repeats)
-    bundles: list[EvalBundle] = []
-    for index in range(repeats):
-        print(f"[eval] 第 {index + 1}/{repeats} 轮", file=sys.stderr)
-        bundles.append(await _one_round(args, settings, deps, swapped, topics, personas))
 
-    final = bundles[-1]
-    if repeats > 1:
-        final = replace(final, ci_rows=_ci_rows(bundles))
+    metrics_all: list[dict[str, float]] = []
+    if args.resume:
+        for path in sorted(out_dir.glob("repeat-*.json")):
+            metrics_all.append(json.loads(path.read_text(encoding="utf-8")))
+        print(f"[eval] 复用已有 {len(metrics_all)} 轮结果", file=sys.stderr)
+
+    bundles: list[EvalBundle] = []
+    for index in range(len(metrics_all), repeats):
+        print(f"[eval] 第 {index + 1}/{repeats} 轮", file=sys.stderr)
+        bundle = await _one_round(args, settings, deps, swapped, topics, personas)
+        # 每轮落盘：进程被杀也不丢已完成的轮次
+        (out_dir / f"repeat-{index + 1}.json").write_text(
+            json.dumps(_metrics(bundle), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        (out_dir / f"report-run{index + 1}.md").write_text(eval_markdown(bundle), encoding="utf-8")
+        (out_dir / f"report-run{index + 1}.html").write_text(eval_html(bundle), encoding="utf-8")
+        metrics_all.append(_metrics(bundle))
+        bundles.append(bundle)
+
+    final = bundles[-1] if bundles else synthetic_bundle()
+    if len(metrics_all) > 1:
+        final = replace(final, ci_rows=_ci_rows(metrics_all))
     return final
 
 
@@ -241,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("--out", required=True, help="输出目录（写 report.md 与 report.html）")
     evaluate.add_argument("--dry-run", action="store_true", help="用合成数据渲染报告，不调用任何 API")
     evaluate.add_argument("--repeats", type=int, default=1, help="重复几次（每次重新生成语料），用于均值与 95% CI")
+    evaluate.add_argument("--resume", action="store_true", help="复用已有的 repeat-*.json，只跑缺的轮次")
 
     report = sub.add_parser("report", help="把 JSONL 事件渲染成单文件 HTML 报告")
     report.add_argument("--trace", required=True, help="run 时写出的 JSONL 路径")
