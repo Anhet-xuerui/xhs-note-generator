@@ -1,0 +1,109 @@
+"""命令行入口：关掉页面也能跑（§3 A2）。
+
+    python -m app.cli run --persona scripts/personas/p01.json --topic "租房第一年"
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import sys
+import uuid
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from app.config import ProviderNotConfigured, Settings
+from app.graph.loop import run_loop
+from app.llm.client import Deps, LLMClient
+from app.schemas import PersonaInput, RunInput, Usage
+from app.state import RunState
+
+
+def build_deps() -> Deps:
+    """唯一构造 Settings + LLMClient 的地方（测试通过 monkeypatch 替换它）。"""
+    settings = Settings.load()
+    return Deps(llm=LLMClient(settings), settings=settings)
+
+
+def new_state(persona: PersonaInput, topic: str) -> RunState:
+    return {
+        "run_id": uuid.uuid4().hex[:12],
+        "input": RunInput(persona=persona, topic=topic),
+        "profile": None,
+        "angle": None,
+        "angle_history": [],
+        "round": 0,
+        "draft": None,
+        "draft_history": [],
+        "verdicts": [],
+        "feedback_history": [],
+        "writer_responses": [],
+        "best_round": None,
+        "status": "running",
+    }
+
+
+def result_payload(state: RunState) -> dict:
+    draft = state.get("draft")
+    usage = state.get("usage") or Usage()
+    return {
+        "title": draft.title if draft else None,
+        "body": draft.body if draft else None,
+        "tags": list(draft.tags) if draft else [],
+        "status": state.get("status"),
+        "meta": {
+            "run_id": state.get("run_id"),
+            "rounds_used": len(state.get("verdicts") or []),
+            "best_round": state.get("best_round"),
+            "usage": {
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "cost_cny": round(usage.cost_cny, 4),
+                "calls": usage.calls,
+                "elapsed_s": round(usage.elapsed_s, 2),
+            },
+        },
+    }
+
+
+def _load_persona(path: str) -> PersonaInput:
+    return PersonaInput.model_validate_json(Path(path).read_text(encoding="utf-8"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    try:
+        sys.stdout.reconfigure(errors="replace")  # GBK 控制台不至于因中文崩溃
+    except (AttributeError, OSError):
+        pass
+
+    parser = argparse.ArgumentParser(prog="xhs-agent", description="小红书多角色笔记生成")
+    sub = parser.add_subparsers(dest="command", required=True)
+    run = sub.add_parser("run", help="跑一次生成")
+    run.add_argument("--persona", required=True, help="画像 JSON 文件路径")
+    run.add_argument("--topic", required=True, help="笔记主题")
+    args = parser.parse_args(argv)
+
+    try:
+        persona = _load_persona(args.persona)
+    except FileNotFoundError:
+        print(f"找不到画像文件：{args.persona}", file=sys.stderr)
+        return 1
+    except ValidationError as exc:
+        print(f"画像文件不合规：{args.persona}\n{exc}", file=sys.stderr)
+        return 1
+
+    try:
+        deps = build_deps()
+    except ProviderNotConfigured as exc:
+        print(f"配置缺失：{exc}", file=sys.stderr)
+        return 1
+
+    state = asyncio.run(run_loop(new_state(persona, args.topic), deps))
+    print(json.dumps(result_payload(state), ensure_ascii=False, indent=2))
+    return 0 if state.get("status") != "failed" else 1
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())
