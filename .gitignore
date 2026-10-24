@@ -22,6 +22,9 @@ data/
 # 评测产物
 eval/out/
 
+# 计划执行工作区（scratch，git 忽略）
+.superpowers/
+
 # OS / 编辑器
 .DS_Store
 Thumbs.db

@@ -1,0 +1,42 @@
+[project]
+name = "xhs-agent"
+version = "0.1.0"
+description = "小红书多角色笔记生成系统 — 后端（D1–D3：画像官/策划/主笔/读者 + 循环 + CLI）"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "openai>=1.40",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.24",
+    "httpx2>=2.16",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = ["live: 需要真实 API（配好 .env 后跑 `uv run pytest -m live`）"]
+# 默认不跑 live：它要打真实 API、会花钱、也慢。显式 `-m live` 才跑。
+addopts = "-m 'not live'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+disallow_untyped_defs = false
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]
