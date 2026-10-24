@@ -32,6 +32,14 @@ class E1Result:
 
 
 @dataclass(frozen=True)
+class E1PairwiseResult:
+    comparisons: int
+    accuracy: float
+    tie_rate: float
+    usage: Usage
+
+
+@dataclass(frozen=True)
 class E2Result:
     n: int
     kappa_click: float | None
@@ -110,6 +118,36 @@ async def run_e1(
         by_weights=by_weights,
         sensitive=len({round(value, 6) for value in by_weights.values()}) > 1,
         prompt_sha=reader_prompt_sha256(),
+        usage=_sum_usage(usages),
+    )
+
+
+async def run_e1_pairwise(corpus: Corpus, judge_deps: Deps) -> E1PairwiseResult:
+    """E1 修订版：三对比较（good>mid、mid>bad、good>bad），每对问两次防位置偏好。"""
+    from app.evaluation.pairwise import compare_pair
+
+    total = correct = ties = 0
+    usages: list[Usage] = []
+
+    for item in corpus.items:
+        for first, second in (
+            (item.good, item.mid),
+            (item.mid, item.bad),
+            (item.good, item.bad),
+        ):
+            comparison = await compare_pair(first, second, item.persona, judge_deps)
+            usages.append(comparison.usage)
+            total += 1
+            if comparison.winner == "tie":
+                ties += 1
+            elif comparison.winner == "a":
+                correct += 1
+
+    decided = total - ties
+    return E1PairwiseResult(
+        comparisons=total,
+        accuracy=(correct / decided) if decided else 0.0,
+        tie_rate=(ties / total) if total else 0.0,
         usage=_sum_usage(usages),
     )
 

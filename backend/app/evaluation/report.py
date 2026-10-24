@@ -6,7 +6,7 @@ import html as htmllib
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.evaluation.runners import E1Result, E2Result, E3Row
+from app.evaluation.runners import E1PairwiseResult, E1Result, E2Result, E3Row
 from app.schemas import Usage
 
 
@@ -20,6 +20,7 @@ class EvalBundle:
     reader_host: str
     e1: E1Result
     e2: E2Result
+    e1_pair: E1PairwiseResult | None = None
     e3: dict[str, E3Row] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
@@ -61,10 +62,20 @@ def markdown(bundle: EvalBundle) -> str:
     ]
     for variant, accuracy in sorted(e1.by_weights.items()):
         lines.append(f"| 权重 ×{variant} 下的正确率 | {_pct(accuracy)} | 敏感性检查 |")
+    if bundle.e1_pair is not None:
+        pair = bundle.e1_pair
+        lines.append(
+            f"| **两两比较正确率** | {_pct(pair.accuracy)}"
+            f"（{pair.comparisons} 次比较，位置不一致 {_pct(pair.tie_rate)}） | ≥ 80% 有判别力 |"
+        )
     lines += [
         "",
         _verdict_line("判别力 ≥ 80%", e1.ordering_accuracy >= 0.8),
         _verdict_line("权重 ±30% 结论稳定", not e1.sensitive),
+        _verdict_line(
+            "两两比较判别力 ≥ 80%",
+            bool(bundle.e1_pair and bundle.e1_pair.accuracy >= 0.8),
+        ),
         "",
         "## E2 双厂商一致性（reliability）",
         "",
@@ -131,13 +142,24 @@ def _html_table(headers: list[str], rows: list[list[str]]) -> str:
 
 def html(bundle: EvalBundle) -> str:
     e1, e2, e3 = bundle.e1, bundle.e2, bundle.e3
+    pair_rows = (
+        [
+            [
+                "两两比较正确率",
+                f"{bundle.e1_pair.accuracy:.0%}（{bundle.e1_pair.comparisons} 次，位置不一致 {bundle.e1_pair.tie_rate:.0%}）",
+                "≥ 80% 有判别力",
+            ]
+        ]
+        if bundle.e1_pair
+        else []
+    )
     e1_rows = [
         ["排序正确率", _pct(e1.ordering_accuracy), "≥ 80% 有判别力"],
         ["Kendall τ", _num(e1.kendall_tau), "越接近 1 越好"],
     ] + [
         [f"权重 ×{variant}", _pct(accuracy), "敏感性检查"]
         for variant, accuracy in sorted(e1.by_weights.items())
-    ]
+    ] + pair_rows
     e2_rows = [
         ["click 的 Cohen κ", _num(e2.kappa_click), "≥ 0.6 可接受"],
         ["save 的 Cohen κ", _num(e2.kappa_save), "≥ 0.6 可接受"],

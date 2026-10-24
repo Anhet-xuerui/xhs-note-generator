@@ -20,7 +20,7 @@ from app.evaluation.corpus import build_corpus
 from app.evaluation.report import EvalBundle, synthetic_bundle
 from app.evaluation.report import html as eval_html
 from app.evaluation.report import markdown as eval_markdown
-from app.evaluation.runners import run_e1, run_e2, run_e3
+from app.evaluation.runners import run_e1, run_e1_pairwise, run_e2, run_e3
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
@@ -137,6 +137,7 @@ async def _evaluate(args) -> EvalBundle:
 
     corpus = await build_corpus(topics, deps, personas=personas)
     e1 = await run_e1(corpus, deps)
+    e1_pair = await run_e1_pairwise(corpus, deps)
     e2 = await run_e2(corpus, deps, swapped)
     e3 = {
         "A": await run_e3(topics[: args.pairs], deps, deps, mode="A", personas=personas),
@@ -152,6 +153,7 @@ async def _evaluate(args) -> EvalBundle:
         reader_model=settings.reader_model or "",
         reader_host=host,
         e1=e1,
+        e1_pair=e1_pair,
         e2=e2,
         e3=e3,
     )
