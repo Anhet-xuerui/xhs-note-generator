@@ -95,6 +95,8 @@ uv run python -m app.cli report --trace data/traces/r1.jsonl --out data/report.h
 # 评测（--dry-run 不花钱）
 uv run python -m app.cli eval --dry-run --out ../eval/out
 uv run python -m app.cli eval --topics 10 --pairs 10 --out ../eval/out
+# 多种子重复（每次重新生成语料），输出均值 + bootstrap 95% 置信区间
+uv run python -m app.cli eval --topics 10 --pairs 6 --repeats 3 --out ../eval/out
 
 # 测试
 uv run pytest -q
