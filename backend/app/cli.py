@@ -212,9 +212,10 @@ def _run_eval(args) -> int:
     else:
         bundle = asyncio.run(_evaluate(args))
 
-    (out_dir / "report.md").write_text(eval_markdown(bundle), encoding="utf-8")
-    (out_dir / "report.html").write_text(eval_html(bundle), encoding="utf-8")
-    print(f"评测报告已写入：{out_dir / 'report.md'} 与 report.html")
+    stem = "report-dryrun" if args.dry_run else "report"
+    (out_dir / f"{stem}.md").write_text(eval_markdown(bundle), encoding="utf-8")
+    (out_dir / f"{stem}.html").write_text(eval_html(bundle), encoding="utf-8")
+    print(f"评测报告已写入：{out_dir / (stem + '.md')} 与 {stem}.html")
     return 0
 
 

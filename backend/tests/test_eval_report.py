@@ -28,9 +28,10 @@ def test_cli_eval_dry_run_writes_both_reports(tmp_path, capsys):
     code = cli.main(["eval", "--dry-run", "--out", str(tmp_path)])
 
     assert code == 0
-    assert (tmp_path / "report.md").exists()
-    assert (tmp_path / "report.html").read_text(encoding="utf-8").startswith("<!doctype html>")
-    assert "dry-run" in (tmp_path / "report.md").read_text(encoding="utf-8")
+    # dry-run 写到独立文件名：免得把真实报告覆盖掉（这个坑真踩过）
+    assert (tmp_path / "report-dryrun.md").exists()
+    assert (tmp_path / "report-dryrun.html").read_text(encoding="utf-8").startswith("<!doctype html>")
+    assert "dry-run" in (tmp_path / "report-dryrun.md").read_text(encoding="utf-8")
 
 def test_e2_verdict_requires_both_kappas():
     """§12 判据是 click / save 两个字段的 κ 都要 ≥ 0.6；只查一个会把结论说反。"""

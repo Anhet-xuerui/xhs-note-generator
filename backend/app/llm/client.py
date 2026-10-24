@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-from openai import APIConnectionError, AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
 from app.config import PRICES, Settings, UnknownModelPrice
@@ -28,6 +28,9 @@ if TYPE_CHECKING:  # pragma: no cover
 TModel = TypeVar("TModel", bound=BaseModel)
 
 _FENCE_RE = re.compile(r"^```[a-zA-Z0-9_-]*\s*|\s*```$")
+
+# 上游 5xx / 429 多半是网络或限流，重试一次常常就好了；4xx 重试只会重复犯错。
+RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
 
 
 class NodeCallFailed(RuntimeError):
@@ -163,6 +166,14 @@ class LLMClient:
             except APIConnectionError as exc:
                 usage.calls += 1
                 last_error = exc
+                continue
+            except APIStatusError as exc:
+                usage.calls += 1
+                last_error = exc
+                if exc.status_code not in RETRYABLE_STATUS:
+                    usage.elapsed_s = time.perf_counter() - started
+                    usage.cost_cny = self._cost_cny(model, usage.input_tokens, usage.output_tokens)
+                    raise NodeCallFailed(role, attempt, exc, usage=usage) from exc
                 continue
 
             try:
