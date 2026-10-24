@@ -57,6 +57,22 @@ async def run_humanize(
     profile = state.get("profile") or state["input"].persona
     report = detect(before)
 
+    if report.score == 0 and not hints:
+        # 没有命中项 = 没有可减的东西。改也只会改坏，还白烧一次调用（联调发现）。
+        clean = HumanizedDraft(
+            title=title,
+            cover_text=cover_text,
+            body=before,
+            tags=tags,
+            smell_before=0,
+            smell_after=0,
+            changes=[],
+            fidelity="skipped",
+        )
+        state["humanized"] = clean
+        state["smell"] = report
+        return clean
+
     context = {
         "title": title,
         "body": before,

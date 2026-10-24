@@ -64,3 +64,13 @@ async def test_skips_on_llm_failure():
 
     assert out.fidelity == "skipped"
     assert out.body == body
+
+async def test_zero_smell_skips_model_call():
+    """没有命中项时不该调模型：改了也没东西可改，还会白烧一次调用（联调发现）。"""
+    body = f"{ANCHOR}，月租5200元，2023年3月我在上海签的合同。"
+    deps = deps_with()
+
+    out = await run_humanize(make_humanize_state(body), deps)
+
+    assert out.fidelity == "skipped"
+    assert deps.llm.roles == []
