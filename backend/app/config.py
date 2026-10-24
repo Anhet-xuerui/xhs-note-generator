@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     request_timeout_s: float = 60.0
     max_retries: int = 1
 
+    # 价格表以美元计价（厂商原价），折人民币用这个汇率；改汇率请同时更新注释日期。
+    usd_cny_rate: float = 7.1
+    # DeepSeek 默认开启思考模式（会忽略 temperature 并推高时延）；本项目默认关闭。
+    thinking_enabled: bool = False
+
     @classmethod
     def load(cls) -> "Settings":
         """读取环境变量并校验。
