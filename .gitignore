@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Vite
+node_modules/
+dist/
+
+# 本地数据与密钥（设计文档 §4：key 不入库；SQLite 与 trace 落 ./data）
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite3
+
+# 评测产物
+eval/out/
+
+# OS / 编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
