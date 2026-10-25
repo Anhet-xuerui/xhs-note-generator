@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
@@ -62,6 +63,8 @@ class Deps:
 
     llm: LLMClient
     settings: Settings
+    # 可选的事件出口：SSE 端点把节点起止推给前端；CLI 不传就是 None。
+    event_sink: Callable[[dict[str, Any]], None] | None = None
 
 
 def extract_json(text: str) -> str:
