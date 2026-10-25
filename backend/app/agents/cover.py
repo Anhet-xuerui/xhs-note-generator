@@ -38,11 +38,11 @@ async def run_cover(state: RunState, deps: Deps) -> str:
     )
     merge_usage(state, result.usage)
 
+    draft = state.get("draft")
     text = result.value.cover_text.strip()[:MAX_COVER_CHARS]
     if not text:
         # §10 的兜底：封面失败/空值就取标题前 12 字，别让界面空着一块。
-        text = (state["draft"].title if state.get("draft") else "")[:MAX_COVER_CHARS]
-    draft = state.get("draft")
+        text = (draft.title if draft is not None else "")[:MAX_COVER_CHARS]
     if draft is not None:
         draft.cover_text = text
     return text
