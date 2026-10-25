@@ -35,5 +35,9 @@ def build_trace(state, result: dict[str, Any]) -> list[dict[str, Any]]:
     gate = state.get("gate")
     if gate is not None:
         events.append({"event": "gate", "data": gate.model_dump()})
+    # 报告是唯一活得过重启的证据：七段 prompt 的全文必须跟着走（S1）。
+    prompts = state.get("prompts")
+    if prompts:
+        events.append({"event": "prompts", "data": prompts})
     events.append({"event": "result", "data": result})
     return events

@@ -20,6 +20,10 @@ th{background:#f9fafb;font-weight:600}
 .arrow{color:#9ca3af;margin:0 10px}
 .ok{color:#047857}.bad{color:#b91c1c}
 mark{background:#fef08a;padding:0 2px}
+.badge{display:inline-block;background:#fef3c7;color:#92400e;border-radius:4px;padding:1px 8px;font-size:12px;margin-left:6px}
+details{margin:6px 0}
+summary{cursor:pointer;font-size:13px}
+pre{white-space:pre-wrap;word-break:break-word;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px;font-size:12px;line-height:1.6}
 """
 
 
@@ -91,6 +95,22 @@ def _gate_block(meta: dict[str, Any]) -> str:
     )
 
 
+def _prompts_block(events: list[dict[str, Any]]) -> str:
+    payload = next(
+        (event.get("data") for event in events if event.get("event") == "prompts"), None
+    )
+    if not payload:
+        return "<p class='meta'>这次运行没有记录 prompt 快照</p>"
+    blocks = []
+    for role, item in payload.items():
+        badge = "<span class='badge'>已改动</span>" if item.get("source") == "edited" else ""
+        blocks.append(
+            f"<details><summary>{_esc(role)} · <code>{_esc(item.get('sha8'))}</code>{badge}"
+            f"</summary><pre>{_esc(item.get('text'))}</pre></details>"
+        )
+    return "".join(blocks)
+
+
 def render_report(events: list[dict[str, Any]], result: dict[str, Any]) -> str:
     meta = result.get("meta") or {}
     usage = meta.get("usage") or {}
@@ -130,6 +150,9 @@ def render_report(events: list[dict[str, Any]], result: dict[str, Any]) -> str:
 
 <h2>守门人</h2>
 {_gate_block(meta)}
+
+<h2>prompt</h2>
+{_prompts_block(events)}
 
 <h2>用量</h2>
 <div class="meta">输入 {_esc(usage.get("input_tokens", 0))} tokens｜

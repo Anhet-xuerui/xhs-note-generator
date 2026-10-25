@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import app.cli as cli
+from app.prompts import DEFAULTS, PromptSet
 from app.report.html import render_report
-from app.report.trace import append_event, read_events
+from app.report.trace import append_event, build_trace, read_events
 
 RESULT = {
     "title": "租房第三年，我才知道中介不会告诉你的三件事",
@@ -73,3 +74,25 @@ def test_cli_report_writes_file(tmp_path, capsys):
 def test_cli_report_missing_trace_returns_1(tmp_path, capsys):
     assert cli.main(["report", "--trace", str(tmp_path / "nope.jsonl"), "--out", str(tmp_path / "x.html")]) == 1
     assert "nope.jsonl" in capsys.readouterr().err
+
+
+def test_report_includes_prompt_texts_and_edited_badge():
+    """报告是唯一活得过进程重启的证据（S1）：七个 prompt 的全文得在里面。"""
+    snapshot = PromptSet.defaults().with_text("writer", "改过的主笔 prompt")
+    state = {"prompts": snapshot.record()}
+    payload = {"title": "t", "body": "b", "status": "passed", "meta": {}}
+
+    page = render_report(build_trace(state, payload), payload)
+
+    assert "改过的主笔 prompt" in page
+    assert "已改动" in page
+    assert DEFAULTS["reader"][:12] in page
+
+
+def test_report_without_prompt_snapshot_still_renders():
+    payload = {"title": "t", "body": "b", "status": "passed", "meta": {}}
+
+    page = render_report(build_trace({}, payload), payload)
+
+    assert "<!doctype html>" in page
+    assert "没有记录 prompt 快照" in page
