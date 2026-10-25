@@ -8,10 +8,10 @@
 
 | 项 | 值 |
 |---|---|
-| 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`，75 个提交，工作区干净 |
-| 测试 | **163 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 3 秒 |
-| 质量门 | `ruff` 0、`mypy` 0（39 个模块）、`xhs-invariants` 6/6 |
-| 服务 | 已在本机 `http://127.0.0.1:8000` 跑着（`/health` 返回 `{"ok":true}`） |
+| 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`（D10 已 `--no-ff` 合入），工作区干净 |
+| 测试 | **206 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 3.5 秒 |
+| 质量门 | `ruff` 0、`mypy` 0（43 个模块）、`xhs-invariants` 6/6、前端 `vue-tsc` 0 |
+| 服务 | 用第 1 节的命令起；`/health` 返回 `{"ok":true}` |
 | 前端 | `frontend/dist` 已构建；`backend/.env` 已配好（不入库） |
 
 **注意**：服务是会话里的后台进程，应用重启就没了，用第 1 节的命令重开。
@@ -69,6 +69,7 @@ cd .. && python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .
 ```
 backend/app/
 ├── agents/         7 个角色：profile / planner / writer / reader / cover / humanize / gatekeeper
+├── prompts/        defaults.py（七段默认文本）· set.py（run 快照）· store.py（覆盖层 + 读者守卫）
 ├── context.py      信息隔离唯一实现处（按白名单裁剪，三条隔离有单测 + AST 二次检查）
 ├── graph/          loop.py（手写循环）· decisions.py（纯函数判定）· langgraph_pipeline.py（图编排）
 ├── humanize/       smell.py（六类 AI 味规则）· fidelity.py（数字/专名/锚点/长度四条）
@@ -135,19 +136,14 @@ docs/samples/       真实运行报告 + 五次重复的评测报告与逐轮指
 
 ## 7. 未完成
 
-**A. 用户此刻在等的一件事（本次会话中断在这里）**
-用户提出两个诉求，刚进入 brainstorming 就被要求先写交接文档，**需求尚未澄清、未开始实现**：
+**A. D10 已完成（节点可见 + prompt 可改）**
+规格：`docs/superpowers/specs/2026-10-25-node-inspector-and-editable-prompts-design.md`
+裁决：`docs/decisions/2026-10-25-node-inspector-rulings.md`
 
-1. 把**每个节点的 prompt 显示在前端并可在前端修改**；
-2. 觉得现在界面「过于简陋」，想美化。
-
-悬而未决的关键问题（新会话要先问）：
-> 那个「改 prompt」的场景，是**跑之前**把七个角色的 prompt 调好再跑，还是**边跑边看结果边改**？
-> 这决定了要做「run 前配置 + 持久化」还是「运行中热改 + 重跑当前轮」，两者架构不同。
-
-我的初步判断（未验证，需用户确认）：先做「run 前编辑 + 保存为预设」风险最小；运行中热改需要定义「改完之后从哪一步重跑」，否则会破坏「判定卡冻结 / 轮次上限」这两条硬约束。
-
-UI 美化方向也未定，需要用户给参考（喜欢的产品/风格），否则容易返工。
+- 七个节点的产物、耗时、花费、是否降级都随 `node_end` 事件下发；点节点开抽屉看「产物 / 本轮 prompt / 编辑下一版」。
+- prompt 三层：默认（代码）→ 覆盖（`backend/data/prompts.json`）→ 每次 run 的快照（进报告与 `--trace-out`）。
+- 整条重跑 + 顶部可切回历史 run；`cli eval` 永远用默认 prompt，存在覆盖时启动打印警告。
+- **已知限制**：run 与节点产物只在进程内存，重启即丢（能留存的是报告 HTML 与 CLI JSONL）；`--engine graph` 不发节点事件（API 默认 loop，界面不受影响）。
 
 **B. 评审里没修的 Minor**
 - 前端没有测试，`build` 只跑 `vite build`，没接 `vue-tsc`（`tsconfig.strict` 实际不生效）

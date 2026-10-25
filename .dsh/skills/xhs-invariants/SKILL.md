@@ -20,7 +20,7 @@ description: Use when editing context builders, role prompt templates, the Verdi
 
 | # | 不变式 | 真相源 | checker 规则 |
 |---|---|---|---|
-| C1 | `Verdict` 八字段冻结 | §7、§17 | 字段集必须完全相等 |
+| C1 | `Verdict` 七字段冻结 | §7、§17 | 字段集必须完全相等 |
 | C2 | `Objection` 四字段冻结 | §7 | 字段集必须完全相等 |
 | C3 | 读者看不到 `real_material`/`angle`/历史判定 | §6 | `build_reader_context` 内不得出现这些标识符 |
 | C4 | 轮次上限 = 3，硬编码 | §7、§17 | 必须字面量 `3`，不得来自配置 |
