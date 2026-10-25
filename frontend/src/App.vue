@@ -1,7 +1,13 @@
 <script setup lang="ts">
+import { onUnmounted } from 'vue'
+
 import DraftPanel from './components/DraftPanel.vue'
 import PersonaForm from './components/PersonaForm.vue'
 import TimelinePanel from './components/TimelinePanel.vue'
+import { useRunStore } from './stores/run'
+
+const store = useRunStore()
+onUnmounted(() => store.stop())
 </script>
 
 <template>

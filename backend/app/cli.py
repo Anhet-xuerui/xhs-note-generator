@@ -124,6 +124,7 @@ PERSONAS_DIR = Path(__file__).resolve().parents[1] / "scripts" / "personas"
 def _load_topics() -> list[str]:
     if TOPICS_PATH.exists():
         return json.loads(TOPICS_PATH.read_text(encoding="utf-8"))
+    print(f"[eval] 警告：找不到主题表 {TOPICS_PATH}，退化为 1 个主题", file=sys.stderr)
     return ["租房第一年我终于搞清楚的事"]
 
 
