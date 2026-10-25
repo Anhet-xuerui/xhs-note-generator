@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -11,7 +11,7 @@ __pycache__/
 node_modules/
 dist/
 
-# 本地数据与密钥（设计文档 §4：key 不入库；SQLite 与 trace 落 ./data）
+# 鏈湴鏁版嵁涓庡瘑閽ワ紙璁捐鏂囨。 搂4锛歬ey 涓嶅叆搴擄紱SQLite 涓?trace 钀?./data锛?
 .env
 .env.*
 !.env.example
@@ -19,21 +19,21 @@ data/
 *.sqlite
 *.sqlite3
 
-# 评测产物
-eval/out/
+# 璇勬祴浜х墿
+eval/out*/
 
-# 计划执行工作区（scratch，git 忽略）
+# 璁″垝鎵ц宸ヤ綔鍖猴紙scratch锛実it 蹇界暐锛?
 .superpowers/
 
-# OS / 编辑器
+# OS / 缂栬緫鍣?
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# 评测产物
-eval/out/
+# 璇勬祴浜х墿
+eval/out*/
 
-# pytest 临时目录（有时会落在 backend/ 下）
+# pytest 涓存椂鐩綍锛堟湁鏃朵細钀藉湪 backend/ 涓嬶級
 pytest-of-*/
 
