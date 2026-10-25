@@ -92,6 +92,10 @@ uv run uvicorn app.api.app:create_app --factory --port 8000
 uv run python -m app.cli run --persona scripts/personas/p01.json \
   --topic "租房第一年我终于搞清楚的事" --trace-out data/traces/r1.jsonl
 
+# 换 LangGraph 引擎跑（落 checkpoint 到 data/checkpoints.sqlite，可回放）
+uv run python -m app.cli run --persona scripts/personas/p01.json \
+  --topic "租房第一年" --engine graph
+
 # 渲染单文件过程报告
 uv run python -m app.cli report --trace data/traces/r1.jsonl --out data/report.html
 
@@ -132,7 +136,8 @@ uv run pytest -q
 backend/app/
 ├── agents/        # 七个角色：画像官 / 策划 / 主笔 / 读者 / 封面 / 人味校订 / 守门人
 ├── context.py     # 信息隔离的唯一实现处（白名单裁剪）
-├── graph/         # 讨论循环（while + 纯函数判定）、退出条件、卡死检测
+├── graph/         # 讨论循环（while + 纯函数判定）、退出条件、卡死检测、LangGraph 适配器
+├── api/           # FastAPI：/runs、SSE 事件流、报告、覆写判定 + 单页前端
 ├── humanize/      # AI 味检测器（六类规则）、事实保真四条
 ├── rules/         # 违禁词 YAML + 正则引擎
 ├── evaluation/    # E1/E2/E3、手写统计、评测报告
@@ -145,5 +150,7 @@ backend/app/
 
 ## 还没做
 
-LangGraph 化的编排与 checkpointer（D5）、Vue 前端（D6）、docker 一键启动（D8）、录屏（D8）、人工盲评（E4）。
-现在的编排是手写 `while` + 纯函数判定，每个退出条件都能被单测直接命中；换成 LangGraph 属于重构而非新增能力。
+- **Vue 版前端**：现在是无构建单页（原生 JS + `EventSource`），API 契约不变，换 Vue 只替换 `app/api/static/index.html`。
+- **docker 一键启动、5 分钟录屏**（D8）：按作者要求本轮跳过。
+- **人工盲评（E4）**：没有人类信号，报告「局限」里已写明。
+- **更大样本**：click κ 的 95% 区间仍宽到 0.44–1.00，要把它写成结论还得再加一个量级。

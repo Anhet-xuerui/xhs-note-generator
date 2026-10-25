@@ -9,6 +9,9 @@ dependencies = [
     "openai>=1.40",
     "jieba>=0.42",
     "pyyaml>=6.0",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    "aiosqlite>=0.20",
     "fastapi>=0.140",
     "uvicorn>=0.30",
 ]
