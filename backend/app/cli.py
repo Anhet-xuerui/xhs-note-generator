@@ -97,8 +97,23 @@ def result_payload(state: RunState) -> dict:
     }
 
 
-async def _run_pipeline(state: RunState, deps: Deps) -> RunState:
-    """一条完整的 run：讨论循环 + 定稿尾部（封面 / 人味校订 / 守门人）。"""
+async def _run_pipeline(state: RunState, deps: Deps, engine: str = "loop") -> RunState:
+    """一条完整的 run：讨论循环 + 定稿尾部（封面 / 人味校订 / 守门人）。
+
+    `engine="graph"` 走 LangGraph + SqliteSaver，可回放/可续跑；默认的手写 loop
+    更好调试，两者共用同一批节点函数与判定纯函数。
+    """
+    if engine == "graph":
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+        from app.graph.langgraph_pipeline import run_with_graph
+
+        Path("data").mkdir(exist_ok=True)
+        async with AsyncSqliteSaver.from_conn_string("data/checkpoints.sqlite") as saver:
+            result, _graph, _config = await run_with_graph(
+                state, deps, saver=saver, thread_id=state.get("run_id", "run")
+            )
+        return result
     return await finish_draft(await run_loop(state, deps), deps)
 
 
@@ -255,6 +270,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--persona", required=True, help="画像 JSON 文件路径")
     run.add_argument("--topic", required=True, help="笔记主题")
     run.add_argument("--trace-out", default=None, help="把过程事件写到这个 JSONL 文件")
+    run.add_argument("--engine", choices=["loop", "graph"], default="loop", help="编排引擎：手写 loop 或 LangGraph")
 
     evaluate = sub.add_parser("eval", help="跑 D9 评测（E1 判别力 / E2 一致性 / E3 消融）")
     evaluate.add_argument("--topics", type=int, default=3, help="E1/E2 用多少个主题")
@@ -304,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        state = asyncio.run(_run_pipeline(new_state(persona, args.topic), deps))
+        state = asyncio.run(_run_pipeline(new_state(persona, args.topic), deps, args.engine))
     except (NodeCallFailed, UnknownModelPrice, PlannerContractError) as exc:
         # 跑到一半炸了也要给出可读结果，而不是抛出 traceback（评审 C2）。
         print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2))
