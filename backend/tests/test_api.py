@@ -66,10 +66,16 @@ def _wait(client: TestClient, run_id: str, timeout: float = 10.0) -> dict:
     raise AssertionError("run 未在超时内完成")
 
 
-def test_index_serves_the_single_page():
+def test_index_serves_the_built_vue_app():
+    from app.api.app import INDEX
+
+    if not INDEX.exists():
+        pytest.skip("前端未构建：cd frontend && pnpm build")
+
     page = _client().get("/")
 
     assert page.status_code == 200
+    assert 'id="app"' in page.text
     assert "小红书多角色笔记生成" in page.text
 
 

@@ -37,3 +37,8 @@ eval/out*/
 # pytest 涓存椂鐩綍锛堟湁鏃朵細钀藉湪 backend/ 涓嬶級
 pytest-of-*/
 
+
+# 前端依赖与构建产物
+frontend/node_modules/
+frontend/dist/
+
