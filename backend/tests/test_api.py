@@ -1,8 +1,9 @@
-"""FastAPI 服务：提交 / 快照 / 报告 / 覆写判定 / 事件回放（Task API）。"""
+"""FastAPI 服务：提交 / 快照 / 报告 / 覆写判定 / 事件回放（Task API）+ prompt 接口（D10）。"""
 
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,7 @@ from app.agents.gatekeeper import GateJudgement
 from app.agents.humanize import HumanizeOutput
 from app.api.app import create_app
 from app.api.bus import RunBus
+from app.prompts import ROLES, PromptStore
 from app.schemas import GateFinding, Verdict
 from tests.helpers import deps_with, make_angles, make_card, make_persona, make_writer_output
 
@@ -33,21 +35,41 @@ FP = GateJudgement(
 )
 
 
+def _fake_deps(bus: RunBus, run_id: str):
+    deps = deps_with(
+        make_card(),
+        make_angles(),
+        make_writer_output(),
+        PASS,
+        CoverText(cover_text="押金差点没要回来"),
+        HumanizeOutput(title="租房第三年", body=BODY, tags=["租房", "沪漂", "避坑"], changes=[]),
+        FP,
+    )
+    deps.event_sink = lambda event: bus.publish(run_id, event)
+    return deps
+
+
 def _client() -> TestClient:
+    return TestClient(create_app(deps_factory=_fake_deps))
+
+
+def _client_with_store(tmp_path: Path) -> TestClient:
+    return TestClient(
+        create_app(deps_factory=_fake_deps, prompt_store=PromptStore(tmp_path / "prompts.json"))
+    )
+
+
+def _client_and_captured(tmp_path: Path) -> tuple[TestClient, dict]:
+    """同一套假响应，但把造出来的 Deps 留下来——用来断言 agent 真的收到了覆盖层文本。"""
+    captured: dict = {}
+
     def factory(bus: RunBus, run_id: str):
-        deps = deps_with(
-            make_card(),
-            make_angles(),
-            make_writer_output(),
-            PASS,
-            CoverText(cover_text="押金差点没要回来"),
-            HumanizeOutput(title="租房第三年", body=BODY, tags=["租房", "沪漂", "避坑"], changes=[]),
-            FP,
-        )
-        deps.event_sink = lambda event: bus.publish(run_id, event)
+        deps = _fake_deps(bus, run_id)
+        captured["deps"] = deps
         return deps
 
-    return TestClient(create_app(deps_factory=factory))
+    app = create_app(deps_factory=factory, prompt_store=PromptStore(tmp_path / "prompts.json"))
+    return TestClient(app), captured
 
 
 def _create(client: TestClient) -> str:
@@ -181,3 +203,97 @@ def test_empty_topic_is_rejected_not_500():
     response = client.post("/runs", json={"persona": PERSONA, "topic": ""})
 
     assert response.status_code == 422
+
+
+def test_prompts_endpoint_lists_seven_defaults(tmp_path: Path):
+    body = _client_with_store(tmp_path).get("/prompts").json()
+
+    assert body["roles"] == list(ROLES)
+    assert len(body["items"]) == 7
+    assert {item["source"] for item in body["items"]} == {"default"}
+    assert all(item["sha8"] and item["default_text"] for item in body["items"])
+
+
+def test_put_and_delete_prompt_roundtrip(tmp_path: Path):
+    client = _client_with_store(tmp_path)
+
+    assert client.put("/prompts/writer", json={"text": "新 prompt"}).json()["source"] == "edited"
+    edited = [item["role"] for item in client.get("/prompts").json()["items"] if item["source"] == "edited"]
+    assert edited == ["writer"]
+
+    assert client.delete("/prompts/writer").json()["source"] == "default"
+
+    client.put("/prompts/writer", json={"text": "新 prompt"})
+    client.put("/prompts/cover", json={"text": "新封面"})
+    client.delete("/prompts")
+
+    assert all(item["source"] == "default" for item in client.get("/prompts").json()["items"])
+
+
+@pytest.mark.parametrize("text", ["", "   ", "x" * 20001], ids=["empty", "blank", "too-long"])
+def test_put_prompt_rejects_bad_text(tmp_path: Path, text: str):
+    response = _client_with_store(tmp_path).put("/prompts/writer", json={"text": text})
+
+    assert response.status_code == 422
+
+
+def test_put_prompt_unknown_role_is_404(tmp_path: Path):
+    response = _client_with_store(tmp_path).put("/prompts/nobody", json={"text": "x"})
+
+    assert response.status_code == 404
+
+
+def test_put_reader_prompt_is_guarded(tmp_path: Path):
+    response = _client_with_store(tmp_path).put(
+        "/prompts/reader", json={"text": "看看 real_material 再打分"}
+    )
+
+    assert response.status_code == 409
+    assert "real_material" in response.json()["detail"]
+
+
+def test_run_uses_active_prompt_and_snapshots_it(tmp_path: Path):
+    client, captured = _client_and_captured(tmp_path)
+    client.put("/prompts/writer", json={"text": "改过的主笔 prompt"})
+
+    run_id = _create(client)
+    payload = _wait(client, run_id)
+
+    deps = captured["deps"]
+    assert deps.prompts.text("writer") == "改过的主笔 prompt"
+    assert deps.llm.systems[2] == "改过的主笔 prompt"  # profile, planner, writer…
+    assert payload["meta"]["prompts_edited"] == ["writer"]
+    assert set(payload["meta"]["prompts_sha8"]) == set(ROLES)
+
+    items = client.get(f"/runs/{run_id}/prompts").json()["items"]
+    writer = next(item for item in items if item["role"] == "writer")
+    assert writer["source"] == "edited"
+    assert writer["text"] == "改过的主笔 prompt"
+
+
+def test_run_snapshot_survives_later_edit(tmp_path: Path):
+    """改完 prompt 回去看旧 run，看到的必须是旧文本（D10-4）。"""
+    client, _ = _client_and_captured(tmp_path)
+    client.put("/prompts/writer", json={"text": "第一版"})
+    run_id = _create(client)
+    _wait(client, run_id)
+
+    client.put("/prompts/writer", json={"text": "第二版"})
+
+    items = client.get(f"/runs/{run_id}/prompts").json()["items"]
+    assert next(item for item in items if item["role"] == "writer")["text"] == "第一版"
+
+
+def test_list_runs_is_newest_first(tmp_path: Path):
+    client, _ = _client_and_captured(tmp_path)
+    first = _create(client)
+    _wait(client, first)
+    second = _create(client)
+    _wait(client, second)
+
+    items = client.get("/runs").json()["items"]
+
+    assert [item["run_id"] for item in items][:2] == [second, first]
+    assert items[0]["topic"] == "租房第一年"
+    assert items[0]["prompts_edited"] == []
+    assert items[0]["created_at"]

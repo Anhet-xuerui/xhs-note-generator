@@ -72,6 +72,7 @@ def result_payload(state: RunState) -> dict:
     humanized = state.get("humanized")
     smell = state.get("smell")
     gate = state.get("gate")
+    prompts = state.get("prompts") or {}
     return {
         "title": draft.title if draft else None,
         "cover_text": draft.cover_text if draft else None,
@@ -98,6 +99,11 @@ def result_payload(state: RunState) -> dict:
                 "calls": usage.calls,
                 "elapsed_s": round(usage.elapsed_s, 2),
             },
+            # 哪几个角色的 prompt 被改过、各是什么指纹（D10-3）
+            "prompts_edited": sorted(
+                role for role, item in prompts.items() if item.get("source") == "edited"
+            ),
+            "prompts_sha8": {role: item.get("sha8") for role, item in prompts.items()},
         },
     }
 
@@ -108,6 +114,8 @@ async def _run_pipeline(state: RunState, deps: Deps, engine: str = "loop") -> Ru
     `engine="graph"` 走 LangGraph + SqliteSaver，可回放/可续跑；默认的手写 loop
     更好调试，两者共用同一批节点函数与判定纯函数。
     """
+    # CLI 直接跑也要留下 prompt 快照：`--trace-out` 的 JSONL 是唯一留存的证据（S1、N9）。
+    state.setdefault("prompts", deps.prompts.record())
     if engine == "graph":
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
