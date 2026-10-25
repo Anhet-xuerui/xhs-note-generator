@@ -6,7 +6,7 @@ import html as htmllib
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.evaluation.runners import E1PairwiseResult, E1Result, E2Result, E3Row
+from app.evaluation.runners import E1PairwiseResult, E1Result, E2Result, E3PairResult, E3Row
 from app.schemas import Usage
 
 
@@ -24,6 +24,7 @@ class EvalBundle:
     e3: dict[str, E3Row] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     ci_rows: list[tuple[str, str]] = field(default_factory=list)
+    e3_pair: E3PairResult | None = None
 
 
 def _pct(value: float | None) -> str:
@@ -112,6 +113,21 @@ def markdown(bundle: EvalBundle) -> str:
             f"| {mode} | {labels[mode]} | {_pct(row.pass_rate)} | {_num(row.mean_score)} | "
             f"{row.tokens} | {row.cost_cny} | {row.elapsed_s} | {_num(row.smell_before, 1)} |"
         )
+    if bundle.e3_pair is not None:
+        pair3 = bundle.e3_pair
+        lines += [
+            "",
+            "### E3 两两比较（胜率，替代不可靠的通过率）",
+            "",
+            "| 对比 | 胜率 | tokens | 成本(元) |",
+            "|---|---|---|---|",
+            f"| A 裸模型 vs B 完整链路 | {_pct(pair3.win_a_over_b)} | {pair3.tokens['A']} vs {pair3.tokens['B']} | {pair3.cost_cny['A']} vs {pair3.cost_cny['B']} |",
+            f"| B 完整链路 vs C 读者同厂商 | {_pct(pair3.win_b_over_c)} | {pair3.tokens['B']} vs {pair3.tokens['C']} | {pair3.cost_cny['B']} vs {pair3.cost_cny['C']} |",
+            f"| A 裸模型 vs C 读者同厂商 | {_pct(pair3.win_a_over_c)} | — | — |",
+            "",
+            f"位置不一致率 {_pct(pair.tie_rate)}（每个对比都换序问两次，不一致记 tie）。"
+            "胜率 > 50% 表示前者更常被选中。",
+        ]
     lines += [
         "",
         "> 评分口径：三组成稿都由**同一个读者实例**事后打分；A 组的评分调用成本单列在它的 tokens/成本里。",
@@ -212,6 +228,20 @@ def html(bundle: EvalBundle) -> str:
 <h2>E3 消融</h2>
 {_html_table(["组", "配置", "通过率", "平均分", "tokens", "成本(元)", "时延(s)"], e3_rows)}
 <div class="note">三组成稿都由同一个读者实例事后打分；A 组的评分调用成本单列在它的 tokens/成本里。</div>
+
+{(
+        "<h2>E3 两两比较（胜率）</h2>"
+        + _html_table(
+            ["对比", "胜率", "tokens", "成本(元)"],
+            [
+                ["A 裸模型 vs B 完整链路", f"{bundle.e3_pair.win_a_over_b:.0%}", f"{bundle.e3_pair.tokens['A']} vs {bundle.e3_pair.tokens['B']}", f"{bundle.e3_pair.cost_cny['A']} vs {bundle.e3_pair.cost_cny['B']}"],
+                ["B 完整链路 vs C 读者同厂商", f"{bundle.e3_pair.win_b_over_c:.0%}", f"{bundle.e3_pair.tokens['B']} vs {bundle.e3_pair.tokens['C']}", f"{bundle.e3_pair.cost_cny['B']} vs {bundle.e3_pair.cost_cny['C']}"],
+                ["A 裸模型 vs C 读者同厂商", f"{bundle.e3_pair.win_a_over_c:.0%}", "—", "—"],
+            ],
+        )
+        if bundle.e3_pair
+        else ""
+    )}
 
 <h2>局限</h2>
 <ul>

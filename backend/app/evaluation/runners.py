@@ -50,6 +50,24 @@ class E2Result:
 
 
 @dataclass(frozen=True)
+class E3PairResult:
+    """A/B/C 三组稿子两两比较的胜率（§12 E3 的可用版本）。
+
+    通过率建立在绝对判定卡上，而 E1 已证明那张卡只有 28% 的排序能力；
+    两两比较不要求判定器维持一把尺子，只要求一次局部判断。
+    """
+
+    n: int
+    win_a_over_b: float
+    win_b_over_c: float
+    win_a_over_c: float
+    tie_rate: float
+    tokens: dict[str, int]
+    cost_cny: dict[str, float]
+    usage: Usage
+
+
+@dataclass(frozen=True)
 class E3Row:
     mode: str
     n: int
@@ -232,4 +250,81 @@ async def run_e3(
         elapsed_s=round(time.perf_counter() - started, 1),
         smell_before=(sum(smells) / n) if n else None,
         smell_after=None,
+    )
+
+
+async def _draft_for(
+    mode: str,
+    topic: str,
+    persona: PersonaInput,
+    deps: Deps,
+    same_vendor_deps: Deps,
+) -> tuple[Draft | None, Usage]:
+    if mode == "A":
+        result = await deps.llm.structured(
+            role="writer",
+            system=BARE_SYSTEM,
+            user=json.dumps({"topic": topic, "persona": persona.model_dump()}, ensure_ascii=False),
+            schema=Draft,
+        )
+        return result.value, result.usage
+    state = await run_loop(_state(persona, topic), same_vendor_deps if mode == "C" else deps)
+    return state.get("draft"), state.get("usage") or Usage()
+
+
+async def run_e3_pairwise(
+    topics: list[str],
+    deps: Deps,
+    same_vendor_deps: Deps,
+    judge_deps: Deps,
+    *,
+    personas: list[PersonaInput] | None = None,
+) -> E3PairResult:
+    """同一批主题分别用 A（裸模型）/ B（完整链路）/ C（同厂商读者）成稿，再两两比较。"""
+    from app.evaluation.pairwise import compare_pair
+
+    roster = personas or [DEFAULT_PERSONA]
+    tokens = {"A": 0, "B": 0, "C": 0}
+    cost = {"A": 0.0, "B": 0.0, "C": 0.0}
+    wins = {"ab": 0, "bc": 0, "ac": 0}
+    decided = {"ab": 0, "bc": 0, "ac": 0}
+    ties = total = 0
+    usages: list[Usage] = []
+
+    for index, topic in enumerate(topics):
+        persona = roster[index % len(roster)]
+        drafts: dict[str, Draft | None] = {}
+        for mode in ("A", "B", "C"):
+            draft, usage = await _draft_for(mode, topic, persona, deps, same_vendor_deps)
+            drafts[mode] = draft
+            tokens[mode] += usage.input_tokens + usage.output_tokens
+            cost[mode] += usage.cost_cny
+            usages.append(usage)
+
+        for key, left, right in (("ab", "A", "B"), ("bc", "B", "C"), ("ac", "A", "C")):
+            left_draft, right_draft = drafts[left], drafts[right]
+            if left_draft is None or right_draft is None:
+                continue
+            comparison = await compare_pair(left_draft, right_draft, persona, judge_deps)
+            usages.append(comparison.usage)
+            total += 1
+            if comparison.winner == "tie":
+                ties += 1
+                continue
+            decided[key] += 1
+            if comparison.winner == "a":
+                wins[key] += 1
+
+    def rate(key: str) -> float:
+        return wins[key] / decided[key] if decided[key] else 0.0
+
+    return E3PairResult(
+        n=len(topics),
+        win_a_over_b=rate("ab"),
+        win_b_over_c=rate("bc"),
+        win_a_over_c=rate("ac"),
+        tie_rate=(ties / total) if total else 0.0,
+        tokens=tokens,
+        cost_cny={k: round(v, 4) for k, v in cost.items()},
+        usage=_sum_usage(usages),
     )
