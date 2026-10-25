@@ -103,3 +103,29 @@ async def test_e3_group_a_is_one_generation_plus_scoring():
     assert row.mode == "A"
     assert row.n == 1
     assert row.tokens > 0
+
+async def test_e3_pairwise_reports_win_rates_for_three_groups():
+    from app.evaluation.pairwise import PairChoice
+    from app.evaluation.runners import run_e3_pairwise
+    from app.schemas import Draft
+
+    # 每个主题：A 裸模型 1 次生成；B/C 各跑一次循环（画像官/策划/主笔/读者）
+    bare = Draft(title="裸模型", body="我们都在焦虑里治愈。", tags=["a"])
+    deps = deps_with(
+        bare,
+        make_card(), make_angles(), make_writer_output(), good_verdict(),
+        make_card(), make_angles(), make_writer_output(), good_verdict(),
+    )
+    # 三对比较 × 两次（换序）：A 恒胜、B 胜 C、A 胜 C
+    judge = deps_with(
+        PairChoice(winner="A"), PairChoice(winner="B"),
+        PairChoice(winner="A"), PairChoice(winner="B"),
+        PairChoice(winner="A"), PairChoice(winner="B"),
+    )
+
+    result = await run_e3_pairwise(["t"], deps, deps, judge, personas=[make_persona()])
+
+    assert result.n == 1
+    assert result.win_a_over_b == 1.0
+    assert result.win_b_over_c == 1.0
+    assert result.tokens["A"] > 0 and result.tokens["B"] > 0

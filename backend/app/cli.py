@@ -22,7 +22,7 @@ from app.evaluation.corpus import build_corpus
 from app.evaluation.report import EvalBundle, synthetic_bundle
 from app.evaluation.report import html as eval_html
 from app.evaluation.report import markdown as eval_markdown
-from app.evaluation.runners import run_e1, run_e1_pairwise, run_e2, run_e3
+from app.evaluation.runners import run_e1, run_e1_pairwise, run_e2, run_e3_pairwise
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
@@ -134,11 +134,10 @@ async def _one_round(args, settings, deps, swapped, topics, personas) -> EvalBun
     e1 = await run_e1(corpus, deps)
     e1_pair = await run_e1_pairwise(corpus, deps)
     e2 = await run_e2(corpus, deps, swapped)
-    e3 = {
-        "A": await run_e3(topics[: args.pairs], deps, deps, mode="A", personas=personas),
-        "B": await run_e3(topics[: args.pairs], deps, deps, mode="B", personas=personas),
-        "C": await run_e3(topics[: args.pairs], swapped, deps, mode="C", personas=personas),
-    }
+    # 通过率建立在已被 E1 否定的绝对判定卡上，改用三组稿子两两比较的胜率。
+    e3_pair = await run_e3_pairwise(
+        topics[: args.pairs], deps, swapped, deps, personas=personas
+    )
     host = (settings.reader_base_url or "").split("//")[-1].split("/")[0]
     return EvalBundle(
         topics=topics,
@@ -150,7 +149,8 @@ async def _one_round(args, settings, deps, swapped, topics, personas) -> EvalBun
         e1=e1,
         e1_pair=e1_pair,
         e2=e2,
-        e3=e3,
+        e3={},
+        e3_pair=e3_pair,
     )
 
 
@@ -161,15 +161,18 @@ def _metrics(bundle: EvalBundle) -> dict[str, float]:
         "E2 click κ": bundle.e2.kappa_click,
         "E2 save κ": bundle.e2.kappa_save,
         "E2 score ρ": bundle.e2.spearman_rho,
-        "E3 A 通过率": bundle.e3["A"].pass_rate if "A" in bundle.e3 else None,
-        "E3 B 通过率": bundle.e3["B"].pass_rate if "B" in bundle.e3 else None,
-        "E3 C 通过率": bundle.e3["C"].pass_rate if "C" in bundle.e3 else None,
         "E3 B tokens": float(bundle.e3["B"].tokens) if "B" in bundle.e3 else None,
         "E3 B 成本(元)": bundle.e3["B"].cost_cny if "B" in bundle.e3 else None,
     }
     if bundle.e1_pair is not None:
         rows["E1 两两比较正确率"] = bundle.e1_pair.accuracy
         rows["E1 两两比较 tie 率"] = bundle.e1_pair.tie_rate
+    if bundle.e3_pair is not None:
+        rows["E3 A>B 胜率"] = bundle.e3_pair.win_a_over_b
+        rows["E3 B>C 胜率"] = bundle.e3_pair.win_b_over_c
+        rows["E3 A>C 胜率"] = bundle.e3_pair.win_a_over_c
+        rows["E3 B tokens"] = float(bundle.e3_pair.tokens["B"])
+        rows["E3 B 成本(元)"] = bundle.e3_pair.cost_cny["B"]
     return {key: value for key, value in rows.items() if value is not None}
 
 
