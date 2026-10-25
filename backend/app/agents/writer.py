@@ -4,6 +4,8 @@
 
 1. 上一轮每条 `Objection` 都要被逐条回应（`objection_index` 必须完整覆盖 0..n-1）；
 2. `real_material` 至少要用上 2 条——它是反 AI 味的原料，一条不用就退化成套模板（§2）。
+
+prompt 文本在 `app/prompts/defaults.py`，运行时从 `deps.prompts` 取（D10-1）。
 """
 
 from __future__ import annotations
@@ -16,24 +18,6 @@ from app.context import build_writer_context
 from app.llm.client import Deps
 from app.schemas import Draft, WriterResponse
 from app.state import RunState, merge_usage
-
-WRITER_SYSTEM = """你是小红书笔记的主笔。
-
-按给定的约束卡、选定角度和上一轮读者意见写一版完整笔记。
-- 用足 real_material：至少把两条真实经历写进正文，具体到动作、数字、地点或对话，
-  不要抽象成「很崩溃」「学到了很多」。
-- 语气照 tone；不能碰 cannot_say 里的任何一条。
-- body 300–800 字，段落长短不齐，别写排比句，别写「愿你」「其实」这类句式。
-- 上一轮每条反对意见都要回应：objection_index 用 0、1、2… 对齐其顺序，
-  decision 取 accept（照改）或 reject（不改，但说清为什么读者多虑了）。
-- 第一轮没有反对意见时，responses 必须是空数组。
-
-输出一个 JSON 对象，形状固定为：
-{
-  "draft": {"title": "...", "body": "...", "tags": ["..."]},
-  "responses": [{"objection_index": 0, "decision": "accept", "reason": "..."}]
-}
-只输出 JSON。"""
 
 
 class WriterOutput(BaseModel):
@@ -83,7 +67,7 @@ async def run_writer(state: RunState, deps: Deps) -> tuple[Draft, list[WriterRes
     for attempt in (1, 2):
         result = await deps.llm.structured(
             role="writer",
-            system=WRITER_SYSTEM,
+            system=deps.prompts.text("writer"),
             user=user,
             schema=WriterOutput,
             max_attempts=1,  # 节点层已经重出一次，不再叠加 client 的两次预算（评审 I7）

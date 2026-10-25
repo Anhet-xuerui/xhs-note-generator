@@ -120,14 +120,16 @@ uv run pytest -q
 
 ### 界面
 
-`GET /` 是 Vue 3 单页三栏：左边填画像与主题，中间按 SSE 实时滚动七个节点的起止，右边出稿子、未达标项与守门人命中（逐轮判定卡在 HTML 报告里）。
-`POST /runs` 拿 `run_id` → `GET /runs/{id}/events` 订阅 → `GET /runs/{id}/report` 出同一份过程报告。
+`GET /` 是 Vue 3 单页三栏：左边填画像与主题，中间按 SSE 逐个列出七个节点（耗时、花费、是否降级），右边出稿子、未达标项与守门人命中。
 
-- **构建产物由后端托管**（`frontend/dist`，`/assets` 静态挂载）：省掉一个容器，也不用配跨域（§10）。
+- **点开任一节点**：右侧抽屉三个页签——「产物」（这一轮的结构化结果）、「本轮 prompt」（只读，这个 run 当时用的文本）、「编辑下一版」（改完保存，下一次生成生效）。
+- **prompt 可改，但每轮 run 自带快照**：`GET /prompts` 读当前生效版，`PUT/DELETE /prompts/{role}` 改写或恢复默认；run 启动时快照七段全文，`GET /runs/{id}/prompts` 查得到，HTML 报告里也有。改过 prompt 的 run 不能与 D9 的评测数字对比。
+- **顶部能切回历史 run**（`GET /runs`）：旧 run 的 prompt 与产物仍是它当时那一份，不会被后来的编辑覆盖。
+- 构建产物由后端托管（`frontend/dist`，`/assets` 静态挂载）：省掉一个容器，也不用配跨域（§10）。
 - 没构建时 `/` 返回 503 并提示 `pnpm build`，不会静默给一个空页面。
-- 技术栈：Vue 3 + TS + Vite + Pinia + Element Plus。`src/stores/run.ts` 是唯一的状态源，
-  组件只读它；SSE 连接在收到 result 或组件卸载时关闭。
-- 还没有内联 diff 与 ECharts（§13 列了，但当前页面用不上）——留给「稿子对比」那一版。
+- 技术栈：Vue 3 + TS + Vite + Pinia + Element Plus。`src/stores/run.ts` 是唯一的状态源，组件只读它；SSE 连接在收到 result 或组件卸载时关闭。
+- 构建前可以先跑 `pnpm typecheck`（vue-tsc）——之前 `tsconfig.strict` 只是写着好看，现在真的会跑。
+- 内联 diff 仍未做：目前靠顶部切换两版对照（§13 列的 ECharts 同理，当前页面用不上）。
 
 ## 局限
 

@@ -9,9 +9,10 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from app.agents.reader import READER_PROMPT, render_reader_prompt
+from app.agents.reader import render_reader_prompt
 from app.context import build_reader_context
 from app.llm.client import Deps
+from app.prompts.defaults import READER_PROMPT
 from app.schemas import Draft, PersonaInput, RunInput, Usage, Verdict
 from app.state import RunState
 
