@@ -9,7 +9,7 @@
 | 项 | 值 |
 |---|---|
 | 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`（D10 已 `--no-ff` 合入），工作区干净 |
-| 测试 | **207 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 3.5 秒 |
+| 测试 | **213 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 4 秒 |
 | 质量门 | `ruff` 0、`mypy` 0（43 个模块）、`xhs-invariants` 6/6、前端 `vue-tsc` 0 |
 | 服务 | 用第 1 节的命令起；`/health` 返回 `{"ok":true}` |
 | 前端 | `frontend/dist` 已构建；`backend/.env` 已配好（不入库） |
