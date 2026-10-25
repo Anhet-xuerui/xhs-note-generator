@@ -85,6 +85,9 @@ cd backend
 cp .env.example .env          # 填两组 key：写作侧 + 读者侧（必须不同厂商）
 uv sync
 
+# 起本地服务：浏览器打开 http://localhost:8000
+uv run uvicorn app.api.app:create_app --factory --port 8000
+
 # 跑一次生成（约 35 秒、约 0.04 元）
 uv run python -m app.cli run --persona scripts/personas/p01.json \
   --topic "租房第一年我终于搞清楚的事" --trace-out data/traces/r1.jsonl
@@ -103,6 +106,14 @@ uv run pytest -q
 ```
 
 没有任何外网依赖：所有单测用 `httpx2.MockTransport` 伪造 OpenAI 兼容响应，跑测试不花钱。
+
+### 界面
+
+`GET /` 是一个单页三栏：左边填画像与主题，中间按 SSE 实时滚动七个节点的起止，右边出稿子与判定卡。
+`POST /runs` 拿 `run_id` → `GET /runs/{id}/events` 订阅 → `GET /runs/{id}/report` 出同一份过程报告。
+
+前端是**无构建步骤的单文件**（原生 JS + `EventSource`），没有引 Vue：这一版要证明的是「过程可观察」，
+渲染层用不着组件生态。换 Vue 只需要替换 `app/api/static/index.html`，API 契约不变。
 
 ## 局限
 
