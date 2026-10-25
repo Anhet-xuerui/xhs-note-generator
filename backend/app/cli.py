@@ -26,7 +26,7 @@ from app.evaluation.runners import run_e1, run_e1_pairwise, run_e2, run_e3_pairw
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
-from app.prompts import PromptSet
+from app.prompts import PromptSet, PromptStore
 from app.report.html import render_report
 from app.report.trace import append_event, build_trace, read_events
 from app.schemas import PersonaInput, RunInput, Usage
@@ -39,7 +39,8 @@ def build_deps(prompts: PromptSet | None = None) -> Deps:
     `prompts=None` 时读当前生效的覆盖层；评测路径显式传 `PromptSet.defaults()`（D10-9）。
     """
     settings = Settings.load()
-    return Deps(llm=LLMClient(settings), settings=settings, prompts=prompts or PromptSet.defaults())
+    resolved = prompts if prompts is not None else PromptStore().snapshot()
+    return Deps(llm=LLMClient(settings), settings=settings, prompts=resolved)
 
 
 def new_state(persona: PersonaInput, topic: str) -> RunState:
@@ -148,7 +149,10 @@ def _swapped_reader(settings: Settings) -> Deps:
             "reader_api_key": settings.writer_api_key,
         }
     )
-    return Deps(llm=LLMClient(swapped), settings=swapped)
+    # 评测是量具：量具不能跟着被测量对象一起变（D10-9）。
+    return Deps(
+        llm=LLMClient(swapped), settings=swapped, prompts=PromptSet.defaults()
+    )
 
 
 async def _one_round(args, settings, deps, swapped, topics, personas) -> EvalBundle:
@@ -212,7 +216,14 @@ def _ci_rows(metrics_all: list[dict[str, float]]) -> list[tuple[str, str]]:
 async def _evaluate(args) -> EvalBundle:
     """全部实验跑在**同一个事件循环**里：LLMClient 的 httpx 连接是绑定 loop 的。"""
     settings = Settings.load()
-    deps = Deps(llm=LLMClient(settings), settings=settings)
+    active = PromptStore().snapshot()
+    edited = active.edited_roles()
+    if edited:
+        print(
+            f"[eval] 当前有 {len(edited)} 个 prompt 被改过（{'、'.join(edited)}），本次评测仍用默认版",
+            file=sys.stderr,
+        )
+    deps = Deps(llm=LLMClient(settings), settings=settings, prompts=PromptSet.defaults())
     swapped = _swapped_reader(settings)
     topics = _load_topics()[: args.topics]
     personas = _load_personas()

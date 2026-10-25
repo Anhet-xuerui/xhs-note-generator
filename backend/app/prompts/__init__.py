@@ -5,5 +5,26 @@ agent 只碰 `Deps.prompts`，不直接 import 文本；这样「用哪一版」
 
 from app.prompts.defaults import DEFAULTS, ROLES
 from app.prompts.set import PromptSet, prompt_sha8
+from app.prompts.store import (
+    READER_FORBIDDEN,
+    EmptyPrompt,
+    PromptError,
+    PromptGuardError,
+    PromptStore,
+    PromptTooLong,
+    UnknownPromptRole,
+)
 
-__all__ = ["DEFAULTS", "ROLES", "PromptSet", "prompt_sha8"]
+__all__ = [
+    "DEFAULTS",
+    "ROLES",
+    "READER_FORBIDDEN",
+    "EmptyPrompt",
+    "PromptError",
+    "PromptGuardError",
+    "PromptSet",
+    "PromptStore",
+    "PromptTooLong",
+    "UnknownPromptRole",
+    "prompt_sha8",
+]
