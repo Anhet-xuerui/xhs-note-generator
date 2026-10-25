@@ -44,6 +44,20 @@ class RunState(TypedDict, total=False):
     degraded_rounds: list[int]
     humanized: HumanizedDraft | None
     smell: SmellReport | None
+    # D10：本 run 用的 prompt 快照（role → {text, sha8, source}）
+    prompts: dict[str, dict[str, str]]
+    # D10-12：谁走了兜底、为什么。`_step` 靠它给 node_end 打 degraded 标。
+    degraded_nodes: list[dict[str, str | int]]
+    # D10-5：事件身份，供时间线排序与标「复核」
+    node_seq: int
+    node_attempts: dict[str, int]
+
+
+def mark_degraded(state: RunState, node: str, reason: str) -> None:
+    """兜底也必须留痕：调用失败不能被界面显示成「完成」（D10-12）。"""
+    state.setdefault("degraded_nodes", []).append(
+        {"node": node, "round": state.get("round", 1), "reason": reason}
+    )
 
 
 def merge_usage(state: RunState, usage: Usage) -> Usage:

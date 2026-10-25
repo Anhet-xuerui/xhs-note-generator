@@ -4,6 +4,8 @@
 1. 输入必须是**检测报告**而不是一句「写得更自然」；
 2. 改完必须过保真校验，违反就整篇回退（不重试，重试只是烧钱）；
 3. 回退时正文给改写前的版本，但 `changes` 保留——「想改但被拦下了什么」本身是证据。
+
+prompt 文本在 `app/prompts/defaults.py`，运行时从 `deps.prompts` 取（D10-1）。
 """
 
 from __future__ import annotations
@@ -16,23 +18,7 @@ from app.humanize.fidelity import FidelityResult, check, numbers_of, proper_noun
 from app.humanize.smell import detect
 from app.llm.client import Deps, NodeCallFailed
 from app.schemas import ChangeLog, Draft, HumanizedDraft
-from app.state import RunState, merge_usage
-
-HUMANIZE_SYSTEM = """你是人味校订，负责给一篇已经成型的笔记做减法。
-
-你拿到的是一份 AI 味检测报告——只按报告里的命中项改，不许自由发挥：
-- 删抽象名词，换成具体的动作、数字、对话或场景。
-- 拆掉长句和排比，让段落长短不齐。
-- 把「其实/愿你/不是…而是…」这类句式改成正常说话。
-- 补不出来的具体细节就不要编：宁可删掉那句。
-
-硬约束（违反会被整篇回退）：
-- 数字、专名、真实经历必须原样保留，一个都不能少。
-- 全文长度变化控制在 ±15%。
-- 只做删改与替换，不新增事实。
-
-输出 JSON：{"title": "...", "body": "...", "tags": ["..."],
-"changes": [{"before": "改前片段", "after": "改后片段", "category": "命中的类别", "reason": "为什么这么改"}]}"""
+from app.state import RunState, mark_degraded, merge_usage
 
 
 class HumanizeOutput(BaseModel):
@@ -85,7 +71,7 @@ async def run_humanize(
     try:
         result = await deps.llm.structured(
             role="humanizer",
-            system=HUMANIZE_SYSTEM,
+            system=deps.prompts.text("humanizer"),
             user=json.dumps(context, ensure_ascii=False),
             schema=HumanizeOutput,
         )
@@ -103,6 +89,7 @@ async def run_humanize(
         )
         state["humanized"] = skipped
         state["smell"] = report
+        mark_degraded(state, "humanizer", "校订调用失败，输出改前版本")
         return skipped
 
     merge_usage(state, result.usage)

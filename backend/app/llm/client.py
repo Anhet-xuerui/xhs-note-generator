@@ -14,13 +14,14 @@ import json
 import re
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
 from app.config import PRICES, Settings, UnknownModelPrice
+from app.prompts import PromptSet
 from app.schemas import Usage
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -65,6 +66,8 @@ class Deps:
     settings: Settings
     # 可选的事件出口：SSE 端点把节点起止推给前端；CLI 不传就是 None。
     event_sink: Callable[[dict[str, Any]], None] | None = None
+    # 本次 run 用的 prompt 文本；默认取默认版，API 注入快照（D10-1/D10-3）。
+    prompts: PromptSet = field(default_factory=PromptSet.defaults)
 
 
 def extract_json(text: str) -> str:

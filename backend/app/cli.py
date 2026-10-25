@@ -26,16 +26,20 @@ from app.evaluation.runners import run_e1, run_e1_pairwise, run_e2, run_e3_pairw
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
+from app.prompts import PromptSet
 from app.report.html import render_report
 from app.report.trace import append_event, build_trace, read_events
 from app.schemas import PersonaInput, RunInput, Usage
 from app.state import RunState
 
 
-def build_deps() -> Deps:
-    """唯一构造 Settings + LLMClient 的地方（测试通过 monkeypatch 替换它）。"""
+def build_deps(prompts: PromptSet | None = None) -> Deps:
+    """唯一构造 Settings + LLMClient 的地方（测试通过 monkeypatch 替换它）。
+
+    `prompts=None` 时读当前生效的覆盖层；评测路径显式传 `PromptSet.defaults()`（D10-9）。
+    """
     settings = Settings.load()
-    return Deps(llm=LLMClient(settings), settings=settings)
+    return Deps(llm=LLMClient(settings), settings=settings, prompts=prompts or PromptSet.defaults())
 
 
 def new_state(persona: PersonaInput, topic: str) -> RunState:

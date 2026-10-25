@@ -28,12 +28,14 @@ class FakeLLM:
         self.queue = list(responses)
         self.roles: list[str] = []
         self.users: list[str] = []
+        self.systems: list[str] = []
         self.max_attempts_seen: list[int | None] = []
 
     async def structured(self, *, role: str, system: str, user: str, schema: type, max_attempts=None):
         self.max_attempts_seen.append(max_attempts)
         self.roles.append(role)
         self.users.append(user)
+        self.systems.append(system)
         item = self.queue.pop(0)
         if isinstance(item, BaseException):
             raise item
