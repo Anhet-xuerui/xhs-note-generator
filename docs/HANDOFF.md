@@ -9,7 +9,7 @@
 | 项 | 值 |
 |---|---|
 | 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`（D10 已 `--no-ff` 合入），工作区干净 |
-| 测试 | **206 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 3.5 秒 |
+| 测试 | **207 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 3.5 秒 |
 | 质量门 | `ruff` 0、`mypy` 0（43 个模块）、`xhs-invariants` 6/6、前端 `vue-tsc` 0 |
 | 服务 | 用第 1 节的命令起；`/health` 返回 `{"ok":true}` |
 | 前端 | `frontend/dist` 已构建；`backend/.env` 已配好（不入库） |
@@ -48,7 +48,10 @@ uv run python -m app.cli run --persona scripts/personas/p01.json --topic "…" -
 ```bash
 cd backend && uv run pytest -q && uv run ruff check app tests && uv run mypy app
 cd .. && python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .
+cd frontend && pnpm typecheck
 ```
+
+`uv` 的缓存在受限沙箱里会因目录不可写而失败；此时直接用 `backend/.venv/Scripts/python.exe -m pytest` 等价。
 
 一次真实 run：**30–60 秒、0.03–0.06 元**（写作用 DeepSeek、读者用 GLM，走本机 8788 网关）。
 
