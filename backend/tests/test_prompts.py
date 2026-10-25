@@ -182,3 +182,12 @@ def test_build_deps_reads_active_store_and_can_be_pinned(monkeypatch, tmp_path: 
 
     assert cli.build_deps().prompts.text("writer") == "覆盖版"
     assert cli.build_deps(prompts=PromptSet.defaults()).prompts.text("writer") == DEFAULTS["writer"]
+
+
+def test_default_path_is_anchored_to_backend(monkeypatch) -> None:
+    """从仓库根目录启动服务时，覆盖层不能悄悄写到另一个 data/ 里去。"""
+    monkeypatch.delenv("XHS_PROMPT_STORE", raising=False)
+
+    expected = Path(__file__).resolve().parents[1] / "data" / "prompts.json"
+
+    assert PromptStore.default_path() == expected
