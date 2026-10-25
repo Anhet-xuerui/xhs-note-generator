@@ -12,7 +12,7 @@ import json
 
 from pydantic import BaseModel, Field
 
-from app.humanize.fidelity import check
+from app.humanize.fidelity import FidelityResult, check, numbers_of, proper_nouns_of
 from app.humanize.smell import detect
 from app.llm.client import Deps, NodeCallFailed
 from app.schemas import ChangeLog, Draft, HumanizedDraft
@@ -109,6 +109,12 @@ async def run_humanize(
     out = result.value
     after_report = detect(out.body)
     verdict = check(before, out.body, profile)
+    # 标题也可能被改写，数字/专名一样不能丢（评审 M14）
+    if verdict.ok and (
+        numbers_of(title) != numbers_of(out.title or title)
+        or proper_nouns_of(title) != proper_nouns_of(out.title or title)
+    ):
+        verdict = FidelityResult(False, "标题里的数字或专名变了")
 
     if not verdict.ok:
         # 回退：正文用改写前的，气味分不变，改动记录留着给人看。
@@ -121,6 +127,7 @@ async def run_humanize(
             smell_after=report.score,
             changes=out.changes,
             fidelity="reverted",
+            reverted_reason=verdict.reason,
         )
         state["humanized"] = reverted
         state["smell"] = report

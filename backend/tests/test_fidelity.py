@@ -71,3 +71,11 @@ def test_rejected_when_proper_noun_changes():
 
     assert not result.ok
     assert "专名" in result.reason
+
+def test_anchor_absent_from_before_is_not_required():
+    """评审 I8：主笔只用 2 条素材，剩下 8 条不该逼着改写结果里出现。"""
+    profile = card().model_copy(update={"anchors": [ANCHOR, "从没写进正文的素材"]})
+    before = f"月租5200元，{ANCHOR}，签合同那天中介笑得很热情。"
+    after = f"月租5200元，{ANCHOR}，签合同那天中介笑得很客气。"
+
+    assert check(before, after, profile).ok

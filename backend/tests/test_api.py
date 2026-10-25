@@ -116,7 +116,12 @@ def test_override_verdict_updates_last_card():
     response = client.post(f"/runs/{run_id}/override-verdict", json={"click": False})
 
     assert response.status_code == 200
-    assert response.json()["verdict"]["click"] is False
+    payload = response.json()
+    assert payload["verdict"]["click"] is False
+    # 改判之后结论要跟着变，否则这个接口等于没做事（评审 I10）
+    assert payload["status"] == "exhausted"
+    assert payload["best_round"] == 1
+    assert client.get(f"/runs/{run_id}").json()["status"] == "exhausted"
 
 
 async def test_bus_replays_history_before_live_events():
@@ -168,3 +173,11 @@ def test_config_failure_becomes_an_error_event_not_a_hang():
         body = b"".join(response.iter_bytes()).decode("utf-8")
     assert "event: error" in body
     assert "event: result" in body
+
+def test_empty_topic_is_rejected_not_500():
+    """评审 M12：空主题应该 422，而不是在 handler 里炸成 500。"""
+    client = _client()
+
+    response = client.post("/runs", json={"persona": PERSONA, "topic": ""})
+
+    assert response.status_code == 422

@@ -138,6 +138,7 @@ class HumanizedDraft(BaseModel):
     smell_after: int = Field(ge=0, le=100)
     changes: list[ChangeLog] = Field(default_factory=list)
     fidelity: Literal["passed", "reverted", "skipped"]
+    reverted_reason: str = ""
 
 
 class GateFinding(BaseModel):

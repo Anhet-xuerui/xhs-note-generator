@@ -16,11 +16,12 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.bus import RunBus
 from app.cli import _run_pipeline, build_deps, new_state, result_payload
 from app.config import Settings
+from app.graph.decisions import passed, pick_best_round
 from app.llm.client import Deps
 from app.report.html import render_report
 from app.report.trace import build_trace
@@ -32,7 +33,7 @@ INDEX = DIST_DIR / "index.html"
 
 class RunRequest(BaseModel):
     persona: PersonaInput
-    topic: str
+    topic: str = Field(min_length=1)
 
 
 class OverrideRequest(BaseModel):
@@ -53,6 +54,7 @@ def create_app(
     app = FastAPI(title="小红书多角色笔记生成")
     bus = RunBus()
     runs: dict[str, dict[str, Any]] = {}
+    background: set[asyncio.Task] = set()
 
     @app.post("/runs")
     async def create_run(payload: RunRequest) -> dict[str, str]:
@@ -60,6 +62,9 @@ def create_app(
         state = new_state(payload.persona, payload.topic)
         state["run_id"] = run_id
         runs[run_id] = {"state": state}
+        # 只留最近 100 个 run：本地演示，无界增长没有意义（评审 M18）
+        while len(runs) > 100:
+            runs.pop(next(iter(runs)))
 
         async def execute() -> None:
             bus.publish(run_id, {"event": "run_started", "run_id": run_id})
@@ -75,7 +80,10 @@ def create_app(
                 bus.publish(run_id, {"event": "result", "data": result_payload(state)})
                 bus.close(run_id)
 
-        asyncio.create_task(execute())
+        task = asyncio.create_task(execute())
+        # 持住引用，避免任务被 GC（asyncio 的经典坑，评审 M18）
+        background.add(task)
+        task.add_done_callback(background.discard)
         return {"run_id": run_id}
 
     @app.get("/runs/{run_id}")
@@ -111,8 +119,31 @@ def create_app(
         verdict = verdicts[-1]
         for field, value in payload.model_dump(exclude_none=True).items():
             setattr(verdict, field, value)
+
+        # 改完判定要重算结论并换稿子，否则这个接口等于没做事（评审 I10）。
+        state = record["state"]
+        history = state.get("draft_history") or []
+        if passed(verdict):
+            state["status"] = "passed"
+            state["best_round"] = None
+            if history:
+                state["draft"] = history[-1]
+        else:
+            best = pick_best_round(state["verdicts"])
+            state["status"] = "exhausted"
+            state["best_round"] = best
+            if history:
+                state["draft"] = history[best - 1]
+
+        result = result_payload(state)
         bus.publish(run_id, {"event": "verdict_overridden", "verdict": verdict.model_dump()})
-        return {"ok": True, "verdict": verdict.model_dump()}
+        bus.publish(run_id, {"event": "result", "data": result})
+        return {
+            "ok": True,
+            "verdict": verdict.model_dump(),
+            "status": state["status"],
+            "best_round": state["best_round"],
+        }
 
     @app.get("/runs/{run_id}/report", response_class=HTMLResponse)
     async def report(run_id: str) -> HTMLResponse:
