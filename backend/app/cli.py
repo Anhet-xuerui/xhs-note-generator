@@ -113,7 +113,9 @@ async def _run_pipeline(state: RunState, deps: Deps, engine: str = "loop") -> Ru
             result, _graph, _config = await run_with_graph(
                 state, deps, saver=saver, thread_id=state.get("run_id", "run")
             )
-        return result
+        # ainvoke 返回的是新 dict；调用方（API 的快照/报告）看的是原 state，必须写回。
+        state.update(result)
+        return state
     return await finish_draft(await run_loop(state, deps), deps)
 
 
