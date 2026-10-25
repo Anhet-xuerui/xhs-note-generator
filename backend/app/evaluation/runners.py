@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.evaluation.corpus import DEFAULT_PERSONA, Corpus, _state
 from app.evaluation.judge import Judgement, judge_draft, reader_prompt_sha256
@@ -25,7 +25,7 @@ class E1Result:
     n: int
     ordering_accuracy: float
     kendall_tau: float
-    by_weights: dict[float, float]
+    by_weights: dict[str, float]
     sensitive: bool
     prompt_sha: str
     usage: Usage
@@ -96,6 +96,19 @@ async def _judge_three(item, deps) -> tuple[Judgement, Judgement, Judgement]:
     )
 
 
+def weight_variants(base: ScoreWeights) -> dict[str, ScoreWeights]:
+    """逐维扰动 ±30%。
+
+    整体系数缩放是恒等变换（打分是线性的），排序永远不会变——那样的「敏感性检查」必然通过，
+    等于什么都没验。所以一次只动一个维度。
+    """
+    variants: dict[str, ScoreWeights] = {"baseline": base}
+    for field in ("click", "save", "comment_intent", "read_through"):
+        for factor, tag in ((1.3, "+30%"), (0.7, "-30%")):
+            variants[f"{field} {tag}"] = replace(base, **{field: getattr(base, field) * factor})
+    return variants
+
+
 async def run_e1(
     corpus: Corpus,
     judge_deps: Deps,
@@ -119,8 +132,9 @@ async def run_e1(
         ]
         return ordering_accuracy(groups)
 
-    by_weights = {variant: accuracy(ScoreWeights().scaled(variant)) for variant in weights_variants}
-    base = by_weights.get(1.0, accuracy(ScoreWeights()))
+    perturbed = weight_variants(ScoreWeights())
+    by_weights = {label: accuracy(weights) for label, weights in perturbed.items()}
+    base = by_weights["baseline"]
 
     expected: list[float] = []
     actual: list[float] = []

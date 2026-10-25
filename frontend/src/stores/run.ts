@@ -69,5 +69,10 @@ export const useRunStore = defineStore('run', () => {
     }
   }
 
-  return { persona, topic, runId, status, events, timeline, result, error, report, checks, usage, start, reset }
+  function stop() {
+    close?.()
+    close = null
+  }
+
+  return { persona, topic, runId, status, events, timeline, result, error, report, checks, usage, start, reset, stop }
 })

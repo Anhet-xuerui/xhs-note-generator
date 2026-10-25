@@ -11,7 +11,9 @@ from tests.helpers import deps_with, make_angles, make_card, make_state, make_wr
 
 ANCHOR = "被二房东坑过一个月押金"
 BODY = f"{ANCHOR}，月租5200元。那年冬天我搬了三次家，每次都自己扛箱子上下楼。" * 6
-BAD_BODY = f"{ANCHOR}，月租5200元。这个方法保证一个月见效，亲测有效。" * 6
+# 长度必须和主笔原文接近，否则人味校订会被保真回退、守门人根本看不到「保证」
+BASE_BODY = make_writer_output().draft.body
+BAD_BODY = BASE_BODY + "保证有效。"
 
 
 def passing() -> Verdict:

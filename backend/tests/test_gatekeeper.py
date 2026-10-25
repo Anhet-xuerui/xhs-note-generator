@@ -71,7 +71,9 @@ async def test_blocking_hit_without_false_positive_fails():
     result = await run_gatekeeper({}, deps_with(judgement), draft_with(body))
 
     assert not result.passed
-    assert len(result.findings) == 2
+    # 对账后 findings 是「全部正则命中 + 模型的误报判定」，不是模型原样返回的两条
+    assert {f.rule_id for f in result.findings} >= {"absolute-claim", "medical-efficacy"}
+    assert all(not f.false_positive for f in result.findings if f.severity == "blocking")
 
 
 async def test_model_failure_keeps_regex_findings_and_fails():
@@ -97,3 +99,28 @@ def test_diversion_is_blocking(word):
     findings = match(f"想要清单的{word}", load_rules())
 
     assert any(f.rule_id == "diversion" and f.severity == "blocking" for f in findings)
+
+async def test_missing_blocking_finding_is_not_dropped():
+    """C4 回归：模型漏回一条命中 ≠ 放行；只允许改判 false_positive。"""
+    body = "这个方法保证一个月见效，亲测有效。" + "那年冬天我搬了三次家。" * 20
+    partial = GateJudgement(
+        findings=[
+            GateFinding(rule_id="medical-efficacy", severity="blocking", matched="见效", span=(14, 16), false_positive=False, hint="改"),
+        ]
+    )
+
+    result = await run_gatekeeper({}, deps_with(partial), draft_with(body))
+
+    assert not result.passed
+    assert any(f.rule_id == "absolute-claim" and not f.false_positive for f in result.findings)
+
+
+async def test_invented_finding_is_ignored():
+    body = "那年冬天我搬了三次家。" * 20
+    invented = GateJudgement(
+        findings=[GateFinding(rule_id="absolute-claim", severity="blocking", matched="最", span=(0, 1), false_positive=False, hint="编的")]
+    )
+
+    result = await run_gatekeeper({}, deps_with(invented), draft_with(body))
+
+    assert result.passed

@@ -133,3 +133,35 @@ def test_events_endpoint_requires_known_run():
 @pytest.mark.parametrize("path", ["/health"])
 def test_health(path):
     assert _client().get(path).json() == {"ok": True}
+
+def test_events_stream_delivers_the_whole_timeline():
+    """评审 C1 的回归：SSE 必须真的把事件吐出来，否则界面永远停在「生成中」。"""
+    client = _client()
+    run_id = _create(client)
+    _wait(client, run_id)
+
+    with client.stream("GET", f"/runs/{run_id}/events") as response:
+        body = b"".join(response.iter_bytes()).decode("utf-8")
+
+    assert response.status_code == 200
+    assert "node_start" in body
+    assert "result" in body
+    assert body.count("node_start") >= 6
+
+
+def test_config_failure_becomes_an_error_event_not_a_hang():
+    """评审 C2 的回归：deps 构造失败也要落 error + result，状态不能停在 running。"""
+
+    def broken_factory(bus, run_id):
+        raise RuntimeError("缺少 READER_ 配置")
+
+    client = TestClient(create_app(deps_factory=broken_factory))
+    run_id = _create(client)
+    payload = _wait(client, run_id)
+
+    assert payload["status"] == "failed"
+
+    with client.stream("GET", f"/runs/{run_id}/events") as response:
+        body = b"".join(response.iter_bytes()).decode("utf-8")
+    assert "event: error" in body
+    assert "event: result" in body

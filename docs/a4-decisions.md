@@ -30,7 +30,7 @@
 
 ## 4. 判定卡必须是可数字段，通过条件硬编码
 
-**决策**：`Verdict` 八个字段（click / save / read_through / drop_at_sentence / comment_intent / objections…），
+**决策**：`Verdict` 七个字段（click / save / read_through / drop_at_sentence / comment_intent / objections…），
 通过条件 `click & save & read_through ≥ 0.6 & 无硬伤` 由代码算，模型无权说「可以了」。schema 在评测前冻结。
 
 **为什么**：不可数的评价（「整体不错」）既不能收敛也不能验证；让模型自己判通过，等于既当运动员又当裁判。

@@ -99,12 +99,17 @@ def markdown(bundle: EvalBundle) -> str:
             _kappa_ok(e2.kappa_click) and _kappa_ok(e2.kappa_save),
         ),
         "",
-        "## E3 消融（A 裸模型 / B 七角色 / C 同厂商读者）",
+        "## E3 消融（A 裸模型 / B 讨论循环 / C 同厂商读者）",
         "",
         "| 组 | 配置 | 通过率 | 平均分 | tokens | 成本(元) | 时延(s) | 平均 AI 味 |",
         "|---|---|---|---|---|---|---|---|",
     ]
-    labels = {"A": "裸模型单次成稿", "B": "完整链路", "C": "完整链路 + 读者同厂商"}
+    # B 只跑讨论循环，不含封面/人味校订/守门人——标成「完整链路」会骗人（评审 I4）
+    labels = {
+        "A": "裸模型单次成稿",
+        "B": "讨论循环（不含封面/人味/守门）",
+        "C": "讨论循环 + 读者同厂商",
+    }
     for mode in ("A", "B", "C"):
         row = e3.get(mode)
         if row is None:
@@ -189,7 +194,12 @@ def html(bundle: EvalBundle) -> str:
         ["save 的 Cohen κ", _num(e2.kappa_save), "≥ 0.6 可接受"],
         ["score 的 Spearman ρ", _num(e2.spearman_rho), "越接近 1 越好"],
     ]
-    labels = {"A": "裸模型单次成稿", "B": "完整链路", "C": "完整链路 + 读者同厂商"}
+    # B 只跑讨论循环，不含封面/人味校订/守门人——标成「完整链路」会骗人（评审 I4）
+    labels = {
+        "A": "裸模型单次成稿",
+        "B": "讨论循环（不含封面/人味/守门）",
+        "C": "讨论循环 + 读者同厂商",
+    }
     e3_rows = [
         [mode, labels[mode], _pct(row.pass_rate), _num(row.mean_score), str(row.tokens), str(row.cost_cny), str(row.elapsed_s)]
         for mode, row in ((m, e3.get(m)) for m in ("A", "B", "C"))
@@ -267,7 +277,7 @@ def synthetic_bundle() -> EvalBundle:
             n=2,
             ordering_accuracy=0.5,
             kendall_tau=0.33,
-            by_weights={1.0: 0.5, 1.3: 0.5, 0.7: 0.5},
+            by_weights={"baseline": 0.5, "save +30%": 0.5, "save -30%": 0.5},
             sensitive=False,
             prompt_sha="dryrun000000",
             usage=Usage(),

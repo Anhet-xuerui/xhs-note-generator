@@ -21,8 +21,8 @@ class RunBus:
         return list(self._history.get(run_id, []))
 
     def close(self, run_id: str) -> None:
-        for queue in self._subscribers.get(run_id, []):
-            queue.put_nowait({"event": "done"})
+        # 必须走 publish：否则结束后才连上来的订阅者只看到历史里没有 done，会一直挂着等。
+        self.publish(run_id, {"event": "done"})
 
     async def subscribe(self, run_id: str) -> AsyncIterator[dict[str, Any]]:
         """先补历史再收实时——断线重连也能看到完整过程。"""
