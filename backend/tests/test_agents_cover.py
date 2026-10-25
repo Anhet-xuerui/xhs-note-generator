@@ -55,3 +55,14 @@ async def test_empty_cover_falls_back_to_title_prefix():
 
     assert text
     assert len(text) <= 12
+
+async def test_cover_failure_falls_back_instead_of_killing_the_run():
+    """§10：封面 5xx 用兜底值，不能把已经通过读者的稿子丢掉。"""
+    from app.llm.client import NodeCallFailed
+
+    deps = deps_with(NodeCallFailed("cover", 2, RuntimeError("503")))
+
+    text = await run_cover(state_with_body(), deps)
+
+    assert text
+    assert len(text) <= 12

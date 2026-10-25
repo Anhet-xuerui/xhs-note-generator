@@ -34,6 +34,35 @@ def _verdict(findings: list[GateFinding]) -> bool:
     return not any(f.severity == "blocking" and not f.false_positive for f in findings)
 
 
+def reconcile(inputs: list[GateFinding], judged: list[GateFinding]) -> list[GateFinding]:
+    """模型只被允许改 `false_positive` 和 `hint`。
+
+    漏回一条命中（很常见的形状错误）不能等于放行；凭空多出来的命中也不能算数。
+    按 (rule_id, span) 对账，缺失的保持 blocking。
+    """
+    # 键用 (rule_id, matched) 而不是 span：模型常常把句子下标抄错，但会把命中词原样抄回来。
+    pending: dict[tuple[str, str], list[GateFinding]] = {}
+    for item in judged:
+        pending.setdefault((item.rule_id, item.matched), []).append(item)
+
+    merged: list[GateFinding] = []
+    for original in inputs:
+        bucket = pending.get((original.rule_id, original.matched)) or []
+        candidate = bucket.pop(0) if bucket else None
+        if candidate is None:
+            merged.append(original)
+            continue
+        merged.append(
+            original.model_copy(
+                update={
+                    "false_positive": candidate.false_positive,
+                    "hint": candidate.hint or original.hint,
+                }
+            )
+        )
+    return merged
+
+
 async def run_gatekeeper(state: RunState, deps: Deps, draft: HumanizedDraft) -> GateResult:
     text = f"{draft.title}\n{draft.body}"
     findings = match(text, load_rules()) + match_structure(draft.body, draft.tags)
@@ -58,7 +87,7 @@ async def run_gatekeeper(state: RunState, deps: Deps, draft: HumanizedDraft) -> 
         return result
 
     merge_usage(state, call.usage)
-    judged = call.value.findings or findings
+    judged = reconcile(findings, call.value.findings)
     result = GateResult(passed=_verdict(judged), findings=judged)
     state["gate"] = result
     return result

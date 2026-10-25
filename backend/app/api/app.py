@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from fastapi.staticfiles import StaticFiles
@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from app.api.bus import RunBus
 from app.cli import _run_pipeline, build_deps, new_state, result_payload
+from app.config import Settings
 from app.llm.client import Deps
 from app.report.html import render_report
 from app.schemas import PersonaInput
@@ -41,9 +42,13 @@ class OverrideRequest(BaseModel):
 
 def create_app(
     *,
-    deps_factory: Callable[[RunBus, str], Deps] = lambda bus, run_id: build_deps(),
+    deps_factory: Callable[[RunBus, str], Deps] | None = None,
     engine: str = "loop",
 ) -> FastAPI:
+    if deps_factory is None:
+        # 生产路径：配置错就启动失败，而不是等第一个 run 才炸（评审 C2）。
+        Settings.load()
+        deps_factory = lambda bus, run_id: build_deps()  # noqa: E731
     app = FastAPI(title="小红书多角色笔记生成")
     bus = RunBus()
     runs: dict[str, dict[str, Any]] = {}
@@ -56,10 +61,11 @@ def create_app(
         runs[run_id] = {"state": state}
 
         async def execute() -> None:
-            deps = deps_factory(bus, run_id)
-            deps.event_sink = lambda event: bus.publish(run_id, event)
             bus.publish(run_id, {"event": "run_started", "run_id": run_id})
             try:
+                # 构造 deps 也要在 try 里：配置缺失必须变成一条 error 事件（评审 C2）。
+                deps = deps_factory(bus, run_id)
+                deps.event_sink = lambda event: bus.publish(run_id, event)
                 await _run_pipeline(state, deps, engine)
             except Exception as exc:  # noqa: BLE001 - 任何异常都要变成可读事件
                 state["status"] = "failed"
@@ -78,16 +84,20 @@ def create_app(
             raise HTTPException(status_code=404, detail="run 不存在")
         return result_payload(record["state"])
 
-    @app.get("/runs/{run_id}/events")
-    async def events(run_id: str) -> EventSourceResponse:
+    def require_run(run_id: str) -> None:
         if run_id not in runs:
             raise HTTPException(status_code=404, detail="run 不存在")
 
-        async def stream():
-            async for event in bus.subscribe(run_id):
-                yield ServerSentEvent(data=event, event=event.get("event", "message"))
-
-        return EventSourceResponse(stream())
+    # FastAPI 0.140+ 的 SSE 编码发生在路由层：必须用 response_class 声明 + 直接 yield，
+    # 把 EventSourceResponse(...) 当返回值会交给 StreamingResponse，然后 chunk.encode() 炸掉（评审 C1）。
+    @app.get(
+        "/runs/{run_id}/events",
+        response_class=EventSourceResponse,
+        dependencies=[Depends(require_run)],
+    )
+    async def events(run_id: str):
+        async for event in bus.subscribe(run_id):
+            yield ServerSentEvent(data=event, event=event.get("event", "message"))
 
     @app.post("/runs/{run_id}/override-verdict")
     async def override(run_id: str, payload: OverrideRequest) -> dict[str, Any]:
