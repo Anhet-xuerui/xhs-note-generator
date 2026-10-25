@@ -67,8 +67,14 @@ def _now() -> str:
 
 
 def guard_reader_text(text: str) -> None:
+    """拦「读者不该看到的字段名」。
+
+    两侧只排除 ASCII 单词字符：中文直接贴着写（「看real_material打分」）也算命中，
+    但 `angle` 不会把 `triangle` 一起毙掉；大小写变体一并拦下——模型不认大小写。
+    """
     for token in sorted(READER_FORBIDDEN):
-        if re.search(re.escape(token), text):
+        pattern = rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])"
+        if re.search(pattern, text, re.IGNORECASE):
             raise PromptGuardError(token)
 
 

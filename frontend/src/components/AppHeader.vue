@@ -61,6 +61,15 @@ function label(runId: string): string {
         已修改 {{ store.editedRoles.length }} 个 prompt
       </el-tag>
 
+      <el-button
+        type="primary"
+        size="small"
+        :loading="store.status === 'running'"
+        @click="store.start()"
+      >
+        用当前 prompt 重跑
+      </el-button>
+
       <span v-if="store.usage" class="meta">
         {{ store.usage.calls }} 次调用 · {{ store.usage.cost_cny }} 元 ·
         {{ store.usage.elapsed_s }} 秒

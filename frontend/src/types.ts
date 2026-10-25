@@ -70,6 +70,11 @@ export interface NodeEvent extends RunEvent {
   product?: unknown
 }
 
+/** 时间线上的一行：`node_start` 先占位（pending），`node_end` 再补齐结果。 */
+export interface NodeRow extends NodeEvent {
+  pending?: boolean
+}
+
 export interface PromptItem {
   role: string
   text: string

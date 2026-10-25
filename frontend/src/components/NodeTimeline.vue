@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 import { useRunStore } from '../stores/run'
-import { ROLE_LABELS, type NodeEvent } from '../types'
+import { ROLE_LABELS, type NodeEvent, type NodeRow } from '../types'
 
 const store = useRunStore()
 const emit = defineEmits<{ open: [node: NodeEvent] }>()
@@ -14,18 +14,21 @@ const statusText = computed(() => {
   return '待开始'
 })
 
-function rowState(node: NodeEvent): { text: string; kind: string } {
+function rowState(node: NodeRow): { text: string; kind: string } {
+  if (node.pending) return { text: '运行中', kind: 'waiting' }
   if (node.ok === false) return { text: '失败', kind: 'bad' }
   if (node.degraded) return { text: '降级', kind: 'warn' }
   return { text: '完成', kind: 'ok' }
 }
 
-function duration(node: NodeEvent): string {
+function duration(node: NodeRow): string {
+  if (node.pending) return '…'
   const ms = node.elapsed_ms ?? 0
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 }
 
-function cost(node: NodeEvent): string {
+function cost(node: NodeRow): string {
+  if (node.pending) return '…'
   const value = node.usage?.cost_cny ?? 0
   return value ? `${value.toFixed(4)} 元` : '—'
 }
@@ -70,7 +73,9 @@ function cost(node: NodeEvent): string {
         </button>
       </section>
     </template>
-    <p v-else class="empty">还没有事件。填好画像、点「生成」，这里会逐个出现七个角色。</p>
+    <p v-else class="empty">
+      点「开始生成」后，这里会逐个出现七个角色；正在跑的那个显示「运行中」。
+    </p>
   </el-card>
 </template>
 
@@ -122,6 +127,9 @@ function cost(node: NodeEvent): string {
 }
 .dot.ok {
   background: #059669;
+}
+.dot.waiting {
+  background: #9ca3af;
 }
 .dot.warn {
   background: #d97706;

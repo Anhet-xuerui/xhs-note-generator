@@ -153,6 +153,21 @@ def test_reader_guard_blocks_isolated_identifiers(tmp_path: Path, word: str) -> 
     PromptStore(tmp_path / "p2.json").set("writer", f"用 {word} 写")
 
 
+@pytest.mark.parametrize(
+    "text",
+    ["REAL_MATERIAL", "Real_Material 看一眼", "看real_material打分", "VERDICTS", "Angle"],
+)
+def test_reader_guard_is_case_insensitive_and_survives_cjk_glue(tmp_path: Path, text: str) -> None:
+    """大小写变体与「中文直接贴着英文」都是最容易漏的两种写法。"""
+    with pytest.raises(PromptGuardError):
+        PromptStore(tmp_path / "p.json").set("reader", text)
+
+
+def test_reader_guard_does_not_match_inside_english_words(tmp_path: Path) -> None:
+    """`angle` 不该把 triangle / rectangle 一起毙掉，否则守卫看起来像 bug。"""
+    PromptStore(tmp_path / "p.json").set("reader", "画一个 triangle，再画 rectangle，别画 Angular")
+
+
 def test_guard_list_matches_checker() -> None:
     """两份清单漂移过一次就是事故：checker 挡住字面，这里挡住写入。"""
     source = CHECKER.read_text(encoding="utf-8")

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 
 import { useRunStore } from '../stores/run'
@@ -17,6 +18,26 @@ watch(
     tab.value = 'product'
   },
 )
+
+/** 关抽屉前先把「草稿会丢」说清楚，别让未保存的修改静默消失。 */
+function beforeClose(done: () => void) {
+  if (!store.hasUnsaved) {
+    done()
+    return
+  }
+  ElMessageBox.confirm('这一步的 prompt 还没保存，关掉就丢了。', '未保存的修改', {
+    type: 'warning',
+    confirmButtonText: '丢弃',
+    cancelButtonText: '继续编辑',
+  })
+    .then(() => {
+      store.clearDirty()
+      done()
+    })
+    .catch(() => {
+      /* 继续编辑 */
+    })
+}
 
 const role = computed(() => props.node?.node ?? '')
 const label = computed(() => ROLE_LABELS[role.value] ?? role.value)
@@ -40,6 +61,7 @@ function duration(ms: number | undefined): string {
     :size="560"
     direction="rtl"
     :with-header="true"
+    :before-close="beforeClose"
     @close="emit('close')"
   >
     <template #header>

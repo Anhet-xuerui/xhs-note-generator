@@ -28,6 +28,8 @@ watch(
 const dirty = computed(() => draft.value !== (item.value?.text ?? ''))
 const warnings = computed(() => contractWarnings(props.role, draft.value))
 
+watch(dirty, (value) => store.setDirty(props.role, value), { immediate: true })
+
 async function save() {
   saving.value = true
   message.value = ''

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { ElMessageBox } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 
 import {
@@ -15,6 +16,7 @@ import {
 } from '../api'
 import type {
   NodeEvent,
+  NodeRow,
   Persona,
   PromptItem,
   RunEvent,
@@ -61,13 +63,22 @@ export const useRunStore = defineStore('run', () => {
   const timeline = computed(() =>
     events.value.filter((event) => event.event === 'node_start' || event.event === 'node_end'),
   )
-  const nodes = computed<NodeEvent[]>(() =>
-    events.value
-      .filter((event): event is NodeEvent => event.event === 'node_end')
-      .sort((left, right) => (left.seq ?? 0) - (right.seq ?? 0)),
-  )
+  const nodes = computed<NodeRow[]>(() => {
+    const rows = new Map<number, NodeRow>()
+    for (const event of events.value) {
+      if (event.event !== 'node_start' && event.event !== 'node_end') continue
+      const node = event as NodeRow
+      const seq = node.seq ?? 0
+      if (node.event === 'node_end') {
+        rows.set(seq, { ...node, pending: false })
+      } else if (!rows.has(seq)) {
+        rows.set(seq, { ...node, pending: true })
+      }
+    }
+    return [...rows.values()].sort((left, right) => (left.seq ?? 0) - (right.seq ?? 0))
+  })
   const rounds = computed(() => {
-    const grouped = new Map<number, NodeEvent[]>()
+    const grouped = new Map<number, NodeRow[]>()
     for (const node of nodes.value) {
       const round = node.round ?? 1
       const bucket = grouped.get(round) ?? []
@@ -92,6 +103,32 @@ export const useRunStore = defineStore('run', () => {
     return Boolean(dirty[role])
   }
 
+  function setDirty(role: string, value: boolean) {
+    dirty[role] = value
+  }
+
+  function clearDirty() {
+    for (const role of Object.keys(dirty)) dirty[role] = false
+  }
+
+  const hasUnsaved = computed(() => Object.values(dirty).some(Boolean))
+
+  /** 草稿只活在编辑器里：切 run / 重跑都会丢掉它，丢之前得让人知道（D10-11）。 */
+  async function guardUnsaved(action: string): Promise<boolean> {
+    if (!hasUnsaved.value) return true
+    try {
+      await ElMessageBox.confirm(
+        `有未保存的 prompt 修改。${action}会用已保存的版本，草稿会丢。`,
+        '未保存的修改',
+        { type: 'warning', confirmButtonText: '继续', cancelButtonText: '回去保存' },
+      )
+      clearDirty()
+      return true
+    } catch {
+      return false
+    }
+  }
+
   function reset() {
     close?.()
     close = null
@@ -101,6 +138,7 @@ export const useRunStore = defineStore('run', () => {
     error.value = ''
     status.value = 'idle'
     runPrompts.value = []
+    openNode.value = null
   }
 
   function attach(id: string) {
@@ -110,6 +148,9 @@ export const useRunStore = defineStore('run', () => {
     events.value = []
     result.value = null
     error.value = ''
+    runPrompts.value = []
+    // 抽屉里的「本轮 prompt」读的是当前 run 的快照；不清掉就会和上一个 run 的产物拼在一起。
+    openNode.value = null
     close = subscribe(id, onEvent)
   }
 
@@ -145,6 +186,7 @@ export const useRunStore = defineStore('run', () => {
   }
 
   async function start() {
+    if (!(await guardUnsaved('重跑'))) return
     reset()
     status.value = 'running'
     try {
@@ -160,6 +202,7 @@ export const useRunStore = defineStore('run', () => {
 
   async function viewRun(id: string) {
     if (id === runId.value && status.value === 'running') return
+    if (!(await guardUnsaved('切到别的 run'))) return
     attach(id)
     status.value = 'running'
     try {
@@ -221,6 +264,9 @@ export const useRunStore = defineStore('run', () => {
     checks,
     usage,
     isDirty,
+    setDirty,
+    clearDirty,
+    hasUnsaved,
     markDirty,
     loadPrompts,
     loadRuns,
