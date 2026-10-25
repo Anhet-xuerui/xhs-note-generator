@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed } from 'vue'
 
 import { useRunStore } from '../stores/run'
@@ -76,7 +76,11 @@ const taboo = computed({
     </el-form>
 
     <p class="hint">
-      {{ store.runId ? `run_id：${store.runId}` : '提交后中间栏会实时滚动七个节点的起止。' }}
+      {{
+        store.runId
+          ? `当前 run：${store.runId}　点中间任一节点看产物、看本轮 prompt、改下一版。`
+          : '提交后中间栏逐个出现七个节点，点开可看产物与 prompt。'
+      }}
     </p>
   </el-card>
 </template>
