@@ -46,3 +46,12 @@ async def test_cover_writes_back_to_draft():
     await run_cover(state, deps)
 
     assert state["draft"].cover_text == "押金差点没要回来"
+
+async def test_empty_cover_falls_back_to_title_prefix():
+    """模型偶尔返回空封面；按 §10 的兜底取标题前 12 字，界面不留空。"""
+    deps = deps_with(CoverText(cover_text="   "))
+
+    text = await run_cover(state_with_body(), deps)
+
+    assert text
+    assert len(text) <= 12

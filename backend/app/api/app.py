@@ -1,31 +1,31 @@
 """FastAPI 服务：提交 run、订阅 SSE、看快照、导出报告（§10/§11）。
 
-前端只有一个静态页（无构建步骤）：这一版的目的是「过程可观察」，
-渲染层用不着 Vue 的组件生态；换 Vue 是后续的事，不影响 API 契约。
+前端是 Vue 3 + Vite 的构建产物（`frontend/dist`），由本服务直接托管——
+§10 的「两个服务变一个」就是这里：省掉一个容器，也省掉跨域配置。
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.api.bus import RunBus
-from app.cli import build_deps, new_state, result_payload
-from app.graph.loop import finish_draft, run_loop
+from app.cli import _run_pipeline, build_deps, new_state, result_payload
 from app.llm.client import Deps
 from app.report.html import render_report
 from app.schemas import PersonaInput
 
-STATIC_DIR = Path(__file__).with_name("static")
+DIST_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+INDEX = DIST_DIR / "index.html"
 
 
 class RunRequest(BaseModel):
@@ -42,6 +42,7 @@ class OverrideRequest(BaseModel):
 def create_app(
     *,
     deps_factory: Callable[[RunBus, str], Deps] = lambda bus, run_id: build_deps(),
+    engine: str = "loop",
 ) -> FastAPI:
     app = FastAPI(title="小红书多角色笔记生成")
     bus = RunBus()
@@ -52,13 +53,14 @@ def create_app(
         run_id = uuid.uuid4().hex[:12]
         state = new_state(payload.persona, payload.topic)
         state["run_id"] = run_id
-        runs[run_id] = {"state": state, "status": "running", "events": bus}
+        runs[run_id] = {"state": state}
 
         async def execute() -> None:
             deps = deps_factory(bus, run_id)
+            deps.event_sink = lambda event: bus.publish(run_id, event)
             bus.publish(run_id, {"event": "run_started", "run_id": run_id})
             try:
-                await finish_draft(await run_loop(state, deps), deps)
+                await _run_pipeline(state, deps, engine)
             except Exception as exc:  # noqa: BLE001 - 任何异常都要变成可读事件
                 state["status"] = "failed"
                 bus.publish(run_id, {"event": "error", "message": str(exc)})
@@ -109,16 +111,20 @@ def create_app(
         page = render_report(bus.history(run_id), result_payload(record["state"]))
         return HTMLResponse(page)
 
+    if (DIST_DIR / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=DIST_DIR / "assets"), name="assets")
+
     @app.get("/")
-    async def index() -> FileResponse:
-        return FileResponse(STATIC_DIR / "index.html")
+    async def index():
+        if not INDEX.exists():
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "前端还没构建：cd frontend && pnpm install && pnpm build"},
+            )
+        return FileResponse(INDEX)
 
     @app.get("/health")
     async def health() -> dict[str, bool]:
         return {"ok": True}
 
     return app
-
-
-def _dumps(event: dict[str, Any]) -> str:
-    return json.dumps(event, ensure_ascii=False)

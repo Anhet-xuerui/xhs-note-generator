@@ -1,0 +1,14 @@
+:root {
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #1f2328;
+}
+body {
+  margin: 0;
+  background: #fafafa;
+}
+.panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  color: #6b7280;
+}

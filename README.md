@@ -86,8 +86,14 @@ cd backend
 cp .env.example .env          # 填两组 key：写作侧 + 读者侧（必须不同厂商）
 uv sync
 
+# 构建前端（Vue 3 + Vite），产物由后端直接托管
+cd ../frontend && pnpm install && pnpm build && cd ../backend
+
 # 起本地服务：浏览器打开 http://localhost:8000
 uv run uvicorn app.api.app:create_app --factory --port 8000
+
+# 或者前后端分离开发（Vite 5173 代理到 8000，热更新）
+cd ../frontend && pnpm dev
 
 # 跑一次生成（约 35 秒、约 0.04 元）
 uv run python -m app.cli run --persona scripts/personas/p01.json \
@@ -114,11 +120,14 @@ uv run pytest -q
 
 ### 界面
 
-`GET /` 是一个单页三栏：左边填画像与主题，中间按 SSE 实时滚动七个节点的起止，右边出稿子与判定卡。
+`GET /` 是 Vue 3 单页三栏：左边填画像与主题，中间按 SSE 实时滚动七个节点的起止，右边出稿子与判定卡。
 `POST /runs` 拿 `run_id` → `GET /runs/{id}/events` 订阅 → `GET /runs/{id}/report` 出同一份过程报告。
 
-前端是**无构建步骤的单文件**（原生 JS + `EventSource`），没有引 Vue：这一版要证明的是「过程可观察」，
-渲染层用不着组件生态。换 Vue 只需要替换 `app/api/static/index.html`，API 契约不变。
+- **构建产物由后端托管**（`frontend/dist`，`/assets` 静态挂载）：省掉一个容器，也不用配跨域（§10）。
+- 没构建时 `/` 返回 503 并提示 `pnpm build`，不会静默给一个空页面。
+- 技术栈：Vue 3 + TS + Vite + Pinia + Element Plus。`src/stores/run.ts` 是唯一的状态源，
+  组件只读它；SSE 连接在组件卸载时关闭。
+- 还没有内联 diff 与 ECharts（§13 列了，但当前页面用不上）——留给「稿子对比」那一版。
 
 ## 局限
 
