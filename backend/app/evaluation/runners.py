@@ -29,6 +29,7 @@ class E1Result:
     sensitive: bool
     prompt_sha: str
     usage: Usage
+    fallback_items: int = 0  # good 档其实是「未通过的最佳轮」的条数
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,12 @@ async def run_e1(
     weights_variants: tuple[float, ...] = (1.0, 1.3, 0.7),
 ) -> E1Result:
     rows: list[tuple[Judgement, Judgement, Judgement]] = []
+    fallback = 0
     for item in corpus.items:
+        if item.good_fallback:
+            # 未通过的稿子不配当 good；把它算进判别力等于往排序里灌噪声。
+            fallback += 1
+            continue
         rows.append(await _judge_three(item, judge_deps))
 
     usages = [j.usage for row in rows for j in row]
@@ -151,6 +157,7 @@ async def run_e1(
         sensitive=len({round(value, 6) for value in by_weights.values()}) > 1,
         prompt_sha=reader_prompt_sha256(),
         usage=_sum_usage(usages),
+        fallback_items=fallback,
     )
 
 

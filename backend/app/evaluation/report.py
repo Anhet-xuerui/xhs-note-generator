@@ -79,6 +79,11 @@ def markdown(bundle: EvalBundle) -> str:
         )
     lines += [
         "",
+        *(
+            [f"- **good 档剔除了 {e1.fallback_items} 篇**（它们其实是未通过 run 的最佳轮）"]
+            if e1.fallback_items
+            else []
+        ),
         _verdict_line("判别力 ≥ 80%", e1.ordering_accuracy >= 0.8),
         _verdict_line("权重 ±30% 结论稳定", not e1.sensitive),
         _verdict_line(

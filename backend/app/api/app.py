@@ -23,6 +23,7 @@ from app.cli import _run_pipeline, build_deps, new_state, result_payload
 from app.config import Settings
 from app.llm.client import Deps
 from app.report.html import render_report
+from app.report.trace import build_trace
 from app.schemas import PersonaInput
 
 DIST_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist"
@@ -118,7 +119,9 @@ def create_app(
         record = runs.get(run_id)
         if record is None:
             raise HTTPException(status_code=404, detail="run 不存在")
-        page = render_report(bus.history(run_id), result_payload(record["state"]))
+        payload = result_payload(record["state"])
+        # 节点事件里没有每轮判定卡；用 state 重建一份，报告才是完整的（评审 I2）。
+        page = render_report(build_trace(record["state"], payload), payload)
         return HTMLResponse(page)
 
     if (DIST_DIR / "assets").is_dir():

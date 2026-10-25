@@ -103,6 +103,9 @@ def test_report_page_renders_after_run():
 
     assert page.status_code == 200
     assert page.text.startswith("<!doctype html>")
+    # 逐轮判定卡必须出现在报告里（评审 I2：之前只有节点事件，表是空的）
+    assert "第 1 轮" in page.text
+    assert "会点开" in page.text
 
 
 def test_override_verdict_updates_last_card():
