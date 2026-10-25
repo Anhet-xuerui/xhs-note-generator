@@ -42,3 +42,7 @@ pytest-of-*/
 frontend/node_modules/
 frontend/dist/
 
+
+# jieba 运行时缓存（9MB 二进制）
+backend/jieba.cache
+

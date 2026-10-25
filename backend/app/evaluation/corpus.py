@@ -90,6 +90,7 @@ async def build_corpus(
     """每个主题跑一次完整讨论循环，取交付稿当 good、首轮稿当 mid，再反向生成 bad。"""
     roster = personas or [DEFAULT_PERSONA]
     items: list[CorpusItem] = []
+    total = Usage()
 
     for index, topic in enumerate(topics):
         persona = roster[index % len(roster)]
@@ -100,6 +101,7 @@ async def build_corpus(
         if delivered is None or not history:
             continue  # 主笔就挂了，这条主题不进语料
 
+        total = total.merge(state.get("usage") or Usage())
         items.append(
             CorpusItem(
                 topic=topic,
@@ -111,4 +113,4 @@ async def build_corpus(
             )
         )
 
-    return Corpus(items=items, usage=state.get("usage") or Usage() if items else Usage())
+    return Corpus(items=items, usage=total)

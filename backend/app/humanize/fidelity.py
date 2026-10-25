@@ -51,7 +51,9 @@ def check(before: str, after: str, profile: ProfileCard | PersonaInput) -> Fidel
 
     # 没有画像卡时退化为「真实经历的前两条」，至少不放弃锚点这一条约束。
     anchors = getattr(profile, "anchors", None) or list(profile.real_material[:2])
-    missing = [anchor for anchor in anchors if anchor not in after]
+    # 只约束「原文里真的用到了」的锚点：主笔只被要求用 2 条素材，剩下 8 条不在正文里，
+    # 要求它们出现在改写结果里等于必定回退（评审 I8）。
+    missing = [anchor for anchor in anchors if anchor in before and anchor not in after]
     if missing:
         return FidelityResult(False, f"素材锚点丢了：{missing[0]}")
 

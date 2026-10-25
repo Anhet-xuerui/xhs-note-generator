@@ -166,6 +166,10 @@ class LLMClient:
                 usage.calls += 1
                 self._accumulate(usage, response.usage)
                 content = response.choices[0].message.content or ""
+            except MissingUsage as exc:
+                # provider 不回 usage：计费无从计算，按节点失败处理（可降级），不要炸整个 run。
+                usage.elapsed_s = time.perf_counter() - started
+                raise NodeCallFailed(role, attempt, exc, usage=usage) from exc
             except APIConnectionError as exc:
                 usage.calls += 1
                 last_error = exc
