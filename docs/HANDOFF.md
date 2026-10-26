@@ -144,6 +144,7 @@ docs/samples/       真实运行报告 + 五次重复的评测报告与逐轮指
 裁决：`docs/decisions/2026-10-25-node-inspector-rulings.md`
 
 - 七个节点的产物、耗时、花费、是否降级都随 `node_end` 事件下发；点节点开抽屉看「产物 / 本轮 prompt / 编辑下一版」。
+- 中间栏底部常驻「角色 prompt」列表：**不用先跑**，点任一角色就能改它的 prompt；跑过之后同一列表按轮次补上产物。
 - prompt 三层：默认（代码）→ 覆盖（`backend/data/prompts.json`）→ 每次 run 的快照（进报告与 `--trace-out`）。
 - 整条重跑 + 顶部可切回历史 run；`cli eval` 永远用默认 prompt，存在覆盖时启动打印警告。
 - **已知限制**：run 与节点产物只在进程内存，重启即丢（能留存的是报告 HTML 与 CLI JSONL）；`--engine graph` 不发节点事件（API 默认 loop，界面不受影响）。

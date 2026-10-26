@@ -2,10 +2,9 @@
 import { computed } from 'vue'
 
 import { useRunStore } from '../stores/run'
-import { ROLE_LABELS, type NodeEvent, type NodeRow } from '../types'
+import { ROLE_LABELS, type NodeRow } from '../types'
 
 const store = useRunStore()
-const emit = defineEmits<{ open: [node: NodeEvent] }>()
 
 const statusText = computed(() => {
   if (store.status === 'running') return '生成中'
@@ -32,61 +31,103 @@ function cost(node: NodeRow): string {
   const value = node.usage?.cost_cny ?? 0
   return value ? `${value.toFixed(4)} 元` : '—'
 }
+
+function openNode(node: NodeRow) {
+  store.target = { role: node.node ?? '', node }
+}
+
+function openRole(role: string) {
+  store.target = { role, node: null }
+}
 </script>
 
 <template>
-  <el-card shadow="never" class="panel">
-    <template #header>
-      <div class="head">
-        <span class="panel-title">过程</span>
-        <el-tag size="small" :type="store.status === 'error' ? 'danger' : 'info'">
-          {{ statusText }}
-        </el-tag>
-      </div>
-    </template>
-
-    <el-alert v-if="store.error" :title="store.error" type="error" :closable="false" show-icon />
-
-    <template v-if="store.rounds.length">
-      <section v-for="group in store.rounds" :key="group.round" class="round">
-        <div class="round-head">
-          <span>第 {{ group.round }} 轮</span>
-          <span class="meta">{{ group.nodes.length }} 个节点</span>
+  <div class="column">
+    <el-card shadow="never" class="panel">
+      <template #header>
+        <div class="head">
+          <span class="panel-title">过程</span>
+          <el-tag size="small" :type="store.status === 'error' ? 'danger' : 'info'">
+            {{ statusText }}
+          </el-tag>
         </div>
-        <button
-          v-for="node in group.nodes"
-          :key="node.seq"
-          type="button"
-          class="node"
-          @click="emit('open', node)"
-        >
-          <span class="dot" :class="rowState(node).kind" />
-          <span class="name">{{ ROLE_LABELS[node.node ?? ''] ?? node.node }}</span>
-          <span class="code mono">{{ node.node }}</span>
-          <span class="tags">
-            <el-tag v-if="(node.attempt ?? 1) > 1" size="small" type="info" effect="plain">复核</el-tag>
-            <el-tag v-if="node.degraded" size="small" type="warning" effect="plain">降级</el-tag>
-            <el-tag v-if="node.ok === false" size="small" type="danger" effect="plain">失败</el-tag>
-          </span>
-          <span class="meta time">{{ duration(node) }}</span>
-          <span class="meta cost">{{ cost(node) }}</span>
-        </button>
-      </section>
-    </template>
-    <p v-else class="empty">
-      点「开始生成」后，这里会逐个出现七个角色；正在跑的那个显示「运行中」。
-    </p>
-  </el-card>
+      </template>
+
+      <el-alert v-if="store.error" :title="store.error" type="error" :closable="false" show-icon />
+
+      <template v-if="store.rounds.length">
+        <section v-for="group in store.rounds" :key="group.round" class="round">
+          <div class="round-head">
+            <span>第 {{ group.round }} 轮</span>
+            <span class="meta">{{ group.nodes.length }} 个节点</span>
+          </div>
+          <button
+            v-for="node in group.nodes"
+            :key="node.seq"
+            type="button"
+            class="node"
+            @click="openNode(node)"
+          >
+            <span class="dot" :class="rowState(node).kind" />
+            <span class="name">{{ ROLE_LABELS[node.node ?? ''] ?? node.node }}</span>
+            <span class="code mono">{{ node.node }}</span>
+            <span class="tags">
+              <el-tag v-if="(node.attempt ?? 1) > 1" size="small" type="info" effect="plain">复核</el-tag>
+              <el-tag v-if="node.degraded" size="small" type="warning" effect="plain">降级</el-tag>
+              <el-tag v-if="node.ok === false" size="small" type="danger" effect="plain">失败</el-tag>
+            </span>
+            <span class="meta time">{{ duration(node) }}</span>
+            <span class="meta cost">{{ cost(node) }}</span>
+          </button>
+        </section>
+      </template>
+      <p v-else class="empty">
+        点「开始生成」后，这里会逐个出现七个角色；正在跑的那个显示「运行中」。
+      </p>
+    </el-card>
+
+    <el-card shadow="never" class="panel roles">
+      <template #header>
+        <div class="head">
+          <span class="panel-title">角色 prompt</span>
+          <span class="meta">不用先跑，点开就能改；保存后下一次生成生效</span>
+        </div>
+      </template>
+
+      <button
+        v-for="item in store.prompts"
+        :key="item.role"
+        type="button"
+        class="node role"
+        @click="openRole(item.role)"
+      >
+        <span class="dot idle" />
+        <span class="name">{{ ROLE_LABELS[item.role] ?? item.role }}</span>
+        <span class="code mono">{{ item.role }}</span>
+        <span class="tags">
+          <el-tag v-if="item.source === 'edited'" size="small" type="warning" effect="plain">已改动</el-tag>
+          <el-tag v-else size="small" type="info" effect="plain">默认</el-tag>
+        </span>
+        <span class="meta mono sha">{{ item.sha8 }}</span>
+        <span class="meta edit">改 →</span>
+      </button>
+      <p v-if="!store.prompts.length" class="empty">prompt 还没加载出来，刷新一下页面试试。</p>
+    </el-card>
+  </div>
 </template>
 
 <style scoped>
-.panel {
-  min-height: 320px;
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 .head {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: baseline;
+  gap: 12px;
 }
 .round {
   margin-bottom: 16px;
@@ -119,6 +160,9 @@ function cost(node: NodeRow): string {
 .node:hover {
   background: #f9fafb;
 }
+.role {
+  grid-template-columns: 10px 88px minmax(0, 1fr) auto 72px 40px;
+}
 .dot {
   width: 8px;
   height: 8px;
@@ -137,6 +181,9 @@ function cost(node: NodeRow): string {
 .dot.bad {
   background: #dc2626;
 }
+.dot.idle {
+  background: #d1d5db;
+}
 .name {
   font-size: 13px;
 }
@@ -152,9 +199,14 @@ function cost(node: NodeRow): string {
   gap: 4px;
 }
 .time,
-.cost {
+.cost,
+.sha,
+.edit {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.edit {
+  color: var(--accent);
 }
 .empty {
   color: var(--muted);

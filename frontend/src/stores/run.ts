@@ -55,7 +55,8 @@ export const useRunStore = defineStore('run', () => {
   const prompts = ref<PromptItem[]>([])
   const runPrompts = ref<RunPromptItem[]>([])
   const dirty = reactive<Record<string, boolean>>({})
-  const openNode = ref<NodeEvent | null>(null)
+  // 抽屉的目标：跑过的节点带产物，没跑过的只有角色（预编辑 prompt）。
+  const target = ref<{ role: string; node: NodeEvent | null } | null>(null)
 
   let close: (() => void) | null = null
 
@@ -138,7 +139,7 @@ export const useRunStore = defineStore('run', () => {
     error.value = ''
     status.value = 'idle'
     runPrompts.value = []
-    openNode.value = null
+    target.value = null
   }
 
   function attach(id: string) {
@@ -150,7 +151,7 @@ export const useRunStore = defineStore('run', () => {
     error.value = ''
     runPrompts.value = []
     // 抽屉里的「本轮 prompt」读的是当前 run 的快照；不清掉就会和上一个 run 的产物拼在一起。
-    openNode.value = null
+    target.value = null
     close = subscribe(id, onEvent)
   }
 
@@ -259,7 +260,7 @@ export const useRunStore = defineStore('run', () => {
     promptByRole,
     runPromptByRole,
     editedRoles,
-    openNode,
+    target,
     report,
     checks,
     usage,

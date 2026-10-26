@@ -7,7 +7,6 @@ import NodeDrawer from './components/NodeDrawer.vue'
 import NodeTimeline from './components/NodeTimeline.vue'
 import PersonaForm from './components/PersonaForm.vue'
 import { useRunStore } from './stores/run'
-import type { NodeEvent } from './types'
 
 const store = useRunStore()
 
@@ -16,20 +15,16 @@ onMounted(() => {
   void store.loadRuns()
 })
 onUnmounted(() => store.stop())
-
-function openDrawer(node: NodeEvent) {
-  store.openNode = node
-}
 </script>
 
 <template>
   <AppHeader />
   <main class="layout">
     <PersonaForm />
-    <NodeTimeline @open="openDrawer" />
+    <NodeTimeline />
     <DraftPanel />
   </main>
-  <NodeDrawer :node="store.openNode" @close="store.openNode = null" />
+  <NodeDrawer :target="store.target" @close="store.target = null" />
 </template>
 
 <style scoped>
