@@ -1,5 +1,10 @@
 # 小红书多角色笔记生成
 
+[![ci](https://github.com/Anhet-xuerui/xhs-note-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/Anhet-xuerui/xhs-note-generator/actions/workflows/ci.yml)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![python](https://img.shields.io/badge/python-3.11-3776ab.svg)
+![vue](https://img.shields.io/badge/frontend-Vue%203%20%2B%20Element%20Plus-42b883.svg)
+
 七个角色在一个受控的讨论循环里互相挑刺，产出一篇能直接发的小红书图文笔记（标题 / 封面文案 / 正文 / 标签）；
 同时把「多角色到底比单次生成好在哪、值不值这个成本」做成可复现的实验。
 
@@ -8,8 +13,8 @@
 
 | 当前状态 | |
 |---|---|
-| 测试 | 161 passed（离线，约 3 秒） |
-| 质量门 | `ruff` 0 / `mypy` 0（39 模块） |
+| 测试 | 223 passed（离线，约 4 秒） |
+| 质量门 | `ruff` 0 / `mypy` 0（46 模块）/ `vue-tsc` 0 |
 | 冻结契约 | `xhs-invariants` 6/6（信息隔离 / schema 冻结 / 轮次上限 / 单一评分口径 / 不采集平台数据） |
 | 一次真实运行 | 8 次调用、**0.037 元**、35 秒 |
 | 过程报告 | [单文件 HTML 样本](docs/samples/report-p01.html)（双击即开，无外部依赖） |

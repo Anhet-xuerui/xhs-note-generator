@@ -21,14 +21,7 @@ from app.prompts.store import (
     UnknownPromptRole,
 )
 
-CHECKER = (
-    Path(__file__).resolve().parents[2]
-    / ".dsh"
-    / "skills"
-    / "xhs-invariants"
-    / "scripts"
-    / "check_invariants.py"
-)
+CHECKER = Path(__file__).resolve().parents[2] / "scripts" / "check_invariants.py"
 
 
 def test_seven_roles_in_fixed_order() -> None:

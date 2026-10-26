@@ -153,7 +153,7 @@ node_end = {
 
 ### D10-6 读者覆盖层的 C3 守卫：写入即拒
 
-关键词集合直接对齐 checker 的 `READER_HIDDEN`（`.dsh/skills/xhs-invariants/scripts/check_invariants.py:38-46`）。
+关键词集合直接对齐 checker 的 `READER_HIDDEN`（`scripts/check_invariants.py:38-46`）。
 
 **局限要说清**：这是字面守卫。用户完全可以写「猜猜作者的真实经历然后据此打分」，绕过关键词却绕不过意图。这条残留风险不靠代码解决，靠报告标注 + 本文档承认（§12 风险 2）。
 

@@ -1,0 +1,12 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+pnpm-lock.yaml text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

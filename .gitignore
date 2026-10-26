@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 .venv/
@@ -6,12 +6,15 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+pytest-of-*/
 
 # Node / Vite
 node_modules/
+frontend/node_modules/
 dist/
+frontend/dist/
 
-# 鏈湴鏁版嵁涓庡瘑閽ワ紙璁捐鏂囨。 搂4锛歬ey 涓嶅叆搴擄紱SQLite 涓?trace 钀?./data锛?
+# 本地数据与密钥（设计文档 §4：key 不入库；SQLite 与 trace 落在 ./data）
 .env
 .env.*
 !.env.example
@@ -19,30 +22,18 @@ data/
 *.sqlite
 *.sqlite3
 
-# 璇勬祴浜х墿
+# 评测产物
 eval/out*/
 
-# 璁″垝鎵ц宸ヤ綔鍖猴紙scratch锛実it 蹇界暐锛?
+# 计划执行工作区与本地 agent 技能（scratch，非项目代码）
 .superpowers/
+.dsh/
 
-# OS / 缂栬緫鍣?
+# OS / 编辑器
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 
-# 璇勬祴浜х墿
-eval/out*/
-
-# pytest 涓存椂鐩綍锛堟湁鏃朵細钀藉湪 backend/ 涓嬶級
-pytest-of-*/
-
-
-# 前端依赖与构建产物
-frontend/node_modules/
-frontend/dist/
-
-
 # jieba 运行时缓存（9MB 二进制）
 backend/jieba.cache
-
