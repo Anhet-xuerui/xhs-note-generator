@@ -7,15 +7,16 @@ import { ROLE_LABELS, type NodeEvent } from '../types'
 import PromptEditor from './PromptEditor.vue'
 
 const store = useRunStore()
-const props = defineProps<{ node: NodeEvent | null }>()
+const props = defineProps<{ target: { role: string; node: NodeEvent | null } | null }>()
 const emit = defineEmits<{ close: [] }>()
 
 const tab = ref<'product' | 'prompt' | 'edit'>('product')
 
 watch(
-  () => props.node?.seq,
-  () => {
-    tab.value = 'product'
+  () => props.target,
+  (value) => {
+    // 跑过的节点先看产物；没跑过的角色点进来就是为了改 prompt。
+    tab.value = value?.node ? 'product' : 'edit'
   },
 )
 
@@ -39,14 +40,22 @@ function beforeClose(done: () => void) {
     })
 }
 
-const role = computed(() => props.node?.node ?? '')
+const node = computed(() => props.target?.node ?? null)
+const role = computed(() => props.target?.role ?? '')
 const label = computed(() => ROLE_LABELS[role.value] ?? role.value)
+const activePrompt = computed(() => store.promptByRole[role.value])
 const runPrompt = computed(() => store.runPromptByRole[role.value])
-const product = computed(() => JSON.stringify(props.node?.product ?? {}, null, 2))
+const promptText = computed(() =>
+  node.value ? (runPrompt.value?.text ?? '') : (activePrompt.value?.text ?? ''),
+)
+const product = computed(() => JSON.stringify(node.value?.product ?? {}, null, 2))
 const upstream = computed(() =>
-  store.nodes.filter(
-    (item) => (item.round ?? 1) === (props.node?.round ?? 1) && (item.seq ?? 0) < (props.node?.seq ?? 0),
-  ),
+  node.value
+    ? store.nodes.filter(
+        (item) =>
+          (item.round ?? 1) === (node.value?.round ?? 1) && (item.seq ?? 0) < (node.value?.seq ?? 0),
+      )
+    : [],
 )
 
 function duration(ms: number | undefined): string {
@@ -57,7 +66,7 @@ function duration(ms: number | undefined): string {
 
 <template>
   <el-drawer
-    :model-value="node !== null"
+    :model-value="target !== null"
     :size="560"
     direction="rtl"
     :with-header="true"
@@ -68,28 +77,31 @@ function duration(ms: number | undefined): string {
       <div class="head">
         <strong>{{ label }}</strong>
         <span class="meta mono">{{ role }}</span>
-        <el-tag size="small" type="info">第 {{ node?.round ?? '—' }} 轮</el-tag>
-        <el-tag v-if="(node?.attempt ?? 1) > 1" size="small" type="info" effect="plain">第 {{ node?.attempt }} 次</el-tag>
+        <el-tag v-if="node" size="small" type="info">第 {{ node.round ?? '—' }} 轮</el-tag>
+        <el-tag v-else size="small" type="info" effect="plain">还没跑</el-tag>
+        <el-tag v-if="(node?.attempt ?? 1) > 1" size="small" type="info" effect="plain">
+          第 {{ node?.attempt }} 次
+        </el-tag>
       </div>
     </template>
 
-    <div v-if="node" class="body">
+    <div v-if="target" class="body">
       <el-alert
-        v-if="node.degraded"
+        v-if="node?.degraded"
         type="warning"
         :closable="false"
         show-icon
         :title="`这一步走了兜底：${node.degraded_reason ?? '原因未记录'}`"
       />
       <el-alert
-        v-if="node.ok === false"
+        v-if="node && node.ok === false"
         type="error"
         :closable="false"
         show-icon
         :title="`调用失败：${node.error ?? '未知错误'}`"
       />
 
-      <div class="stats">
+      <div v-if="node" class="stats">
         <span>耗时 {{ duration(node.elapsed_ms) }}</span>
         <span>花费 {{ (node.usage?.cost_cny ?? 0).toFixed(4) }} 元</span>
         <span>{{ node.usage?.calls ?? 0 }} 次调用</span>
@@ -103,7 +115,7 @@ function duration(ms: number | undefined): string {
           :key="item.seq"
           type="primary"
           :underline="false"
-          @click="store.openNode = item"
+          @click="store.target = { role: item.node ?? '', node: item }"
         >
           {{ ROLE_LABELS[item.node ?? ''] ?? item.node }}
         </el-link>
@@ -111,14 +123,23 @@ function duration(ms: number | undefined): string {
 
       <el-tabs v-model="tab">
         <el-tab-pane label="产物" name="product">
-          <pre class="mono box">{{ product }}</pre>
-        </el-tab-pane>
-        <el-tab-pane label="本轮 prompt（只读）" name="prompt">
-          <p class="meta">
-            这个 run 当时用的文本，只读。改它不会影响这次运行——要改的是「编辑下一版」。
+          <pre v-if="node" class="mono box">{{ product }}</pre>
+          <p v-else class="meta">
+            这一步还没跑过，所以没有产物。可以在「编辑下一版」里先把 prompt 调好，再回左边点生成。
           </p>
-          <pre class="mono box">{{ runPrompt?.text ?? '这次 run 没有 prompt 快照' }}</pre>
         </el-tab-pane>
+
+        <el-tab-pane :label="node ? '本轮 prompt（只读）' : '当前生效版（只读）'" name="prompt">
+          <p class="meta">
+            {{
+              node
+                ? '这个 run 当时用的文本，只读。改它不会影响这次运行——要改的是「编辑下一版」。'
+                : '下一次生成会用的文本。要改就去「编辑下一版」。'
+            }}
+          </p>
+          <pre class="mono box">{{ promptText || '没有拿到 prompt 文本' }}</pre>
+        </el-tab-pane>
+
         <el-tab-pane label="编辑下一版" name="edit">
           <PromptEditor :role="role" />
         </el-tab-pane>
