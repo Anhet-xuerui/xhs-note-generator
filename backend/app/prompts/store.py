@@ -23,7 +23,7 @@ FILE_VERSION = 1
 # store.py → prompts → app → backend：从哪个目录启动都一样，覆盖层只有一份。
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
-# 与 .dsh/skills/xhs-invariants/scripts/check_invariants.py 的 READER_HIDDEN 同集合；
+# 与 scripts/check_invariants.py 的 READER_HIDDEN 同集合；
 # tests/test_prompts.py 有一条用例盯着两边别漂移。
 READER_FORBIDDEN = frozenset(
     {

@@ -104,7 +104,7 @@ Expected: 原 163 passed + 新增 4 passed。
 ```powershell
 .\.venv\Scripts\python.exe -m ruff check app tests
 .\.venv\Scripts\python.exe -m mypy app
-cd ..; python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .
+cd ..; python scripts/check_invariants.py --root .
 git add backend/app backend/tests
 git commit -m "refactor: prompt 收进 app.prompts，七个 agent 从 Deps.prompts 取文本"
 ```
@@ -528,7 +528,7 @@ git commit -m "feat: 节点抽屉 + prompt 编辑（含契约提醒与未保存�
 cd backend; .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check app tests
 .\.venv\Scripts\python.exe -m mypy app
-cd ..; python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .
+cd ..; python scripts/check_invariants.py --root .
 cd frontend; pnpm typecheck; pnpm build
 ```
 Expected: 测试全绿（163 + 新增约 25）；ruff/mypy 无输出；6/6；typecheck/build 成功。

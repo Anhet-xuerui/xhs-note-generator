@@ -8,7 +8,7 @@
 
 | 项 | 值 |
 |---|---|
-| 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`（D10、D11 已 `--no-ff` 合入），工作区干净 |
+| 仓库 | 本仓库根目录（`XHS_Note_Generator`），分支 `main`（D10、D11 已 `--no-ff` 合入），工作区干净 |
 | 测试 | **223 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 4 秒 |
 | 质量门 | `ruff` 0、`mypy` 0（46 个模块）、`xhs-invariants` 6/6、前端 `vue-tsc` 0 |
 | 服务 | 用第 1 节的命令起；`/health` 返回 `{"ok":true}` |
@@ -47,7 +47,7 @@ uv run python -m app.cli run --persona scripts/personas/p01.json --topic "…" -
 
 ```bash
 cd backend && uv run pytest -q && uv run ruff check app tests && uv run mypy app
-cd .. && python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .
+cd .. && python scripts/check_invariants.py --root .
 cd frontend && pnpm typecheck
 ```
 

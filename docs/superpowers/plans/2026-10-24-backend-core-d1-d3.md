@@ -18,7 +18,7 @@
 - 读者必须走**独立的 provider 配置**（`READER_*`），不得回落到主模型配置——`READER_*` 缺失时启动即报错（§13「换厂商是机制，不是偏好」）。
 - 每个节点失败处理按 §10 的表执行：超时重试 1 次 → schema 不符带错误重问 1 次 → 仍失败则 `degraded`。主笔不降级（run `failed`），守门人不降级（本阶段未实现，D4 接）。
 - 单次 run 成本目标 < 1 元人民币（§4）；`Usage` 必须逐调用累计，不得估算。
-- `python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .` 必须 `exit 0`（C1–C6）。
+- `python scripts/check_invariants.py --root .` 必须 `exit 0`（C1–C6）。
 - FastAPI 未来引入时必须 `>=0.140`（原生 `fastapi.sse` 提供 `EventSourceResponse`/`ServerSentEvent`，见 D6 计划；本阶段不装）。
 - 所有中文 prompt 与字段说明用中文书写；代码标识符与注释语言一致（英文标识符、中文 docstring）。
 
@@ -721,7 +721,7 @@ async def test_real_run_produces_valid_note():
 
 Run: `cd backend && uv run pytest -m "not live" -q`
 Expected: 全绿
-Run: `python .dsh/skills/xhs-invariants/scripts/check_invariants.py --root .`
+Run: `python scripts/check_invariants.py --root .`
 Expected: `6 项检查：6 通过 / 0 违规`，`exit 0`
 
 - [ ] **Step 3: 手动跑一次真实调用（可选，需你配好 `.env`）**
