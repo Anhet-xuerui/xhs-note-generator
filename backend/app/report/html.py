@@ -111,6 +111,34 @@ def _prompts_block(events: list[dict[str, Any]]) -> str:
     return "".join(blocks)
 
 
+def _models_block(meta: dict[str, Any]) -> str:
+    models = meta.get("models")
+    if not models:
+        return "<p class='meta'>这次运行没有记录模型</p>"
+    rows = []
+    for role, item in models.items():
+        badge = "<span class='badge'>已改动</span>" if item.get("source") == "edited" else ""
+        unpriced = "" if item.get("priced") == "yes" else "<span class='badge'>未计价</span>"
+        rows.append(
+            f"<tr><td>{_esc(role)}</td><td><code>{_esc(item.get('model'))}</code>"
+            f"{badge}{unpriced}</td></tr>"
+        )
+    warn = (
+        ""
+        if meta.get("reader_independent", True)
+        else "<p class='bad'>读者与主笔是同一个模型：本次判定不构成独立评审。</p>"
+    )
+    return f"<table><tr><th>角色</th><th>模型</th></tr>{''.join(rows)}</table>{warn}"
+
+
+def _cost_line(usage: dict[str, Any]) -> str:
+    cost = _esc(usage.get("cost_cny", 0))
+    unpriced = int(usage.get("unpriced_calls") or 0)
+    if unpriced:
+        return f"≥ {cost} 元（{unpriced} 次调用未计价）"
+    return f"{cost} 元"
+
+
 def render_report(events: list[dict[str, Any]], result: dict[str, Any]) -> str:
     meta = result.get("meta") or {}
     usage = meta.get("usage") or {}
@@ -129,7 +157,7 @@ def render_report(events: list[dict[str, Any]], result: dict[str, Any]) -> str:
 <body>
 <h1>{_esc(result.get("title") or "（没有标题）")}</h1>
 <div class="meta">状态：{_esc(result.get("status"))}　轮次：{_esc(meta.get("rounds_used", 0))}
-　交付第 {_esc(meta.get("best_round") or "—")} 轮　成本：{_esc(usage.get("cost_cny", 0))} 元
+　交付第 {_esc(meta.get("best_round") or "—")} 轮　成本：{_cost_line(usage)}
 　耗时：{_esc(usage.get("elapsed_s", 0))} 秒　调用：{_esc(usage.get("calls", 0))} 次</div>
 
 <h2>封面文案</h2>
@@ -153,6 +181,9 @@ def render_report(events: list[dict[str, Any]], result: dict[str, Any]) -> str:
 
 <h2>prompt</h2>
 {_prompts_block(events)}
+
+<h2>模型</h2>
+{_models_block(meta)}
 
 <h2>用量</h2>
 <div class="meta">输入 {_esc(usage.get("input_tokens", 0))} tokens｜

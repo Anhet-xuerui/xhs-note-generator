@@ -8,9 +8,9 @@
 
 | 项 | 值 |
 |---|---|
-| 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`（D10 已 `--no-ff` 合入），工作区干净 |
-| 测试 | **213 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 4 秒 |
-| 质量门 | `ruff` 0、`mypy` 0（43 个模块）、`xhs-invariants` 6/6、前端 `vue-tsc` 0 |
+| 仓库 | `C:\Users\xuerui\Desktop\dp工作区\XHS_Note_Generator`，分支 `main`（D10、D11 已 `--no-ff` 合入），工作区干净 |
+| 测试 | **223 passed**，1 deselected（live 用例需真 API，默认跳过），离线约 4 秒 |
+| 质量门 | `ruff` 0、`mypy` 0（46 个模块）、`xhs-invariants` 6/6、前端 `vue-tsc` 0 |
 | 服务 | 用第 1 节的命令起；`/health` 返回 `{"ok":true}` |
 | 前端 | `frontend/dist` 已构建；`backend/.env` 已配好（不入库） |
 
@@ -73,6 +73,7 @@ cd frontend && pnpm typecheck
 backend/app/
 ├── agents/         7 个角色：profile / planner / writer / reader / cover / humanize / gatekeeper
 ├── prompts/        defaults.py（七段默认文本）· set.py（run 快照）· store.py（覆盖层 + 读者守卫）
+├── models/         set.py（七角色模型快照）· store.py（data/models.json 覆盖层）
 ├── context.py      信息隔离唯一实现处（按白名单裁剪，三条隔离有单测 + AST 二次检查）
 ├── graph/          loop.py（手写循环）· decisions.py（纯函数判定）· langgraph_pipeline.py（图编排）
 ├── humanize/       smell.py（六类 AI 味规则）· fidelity.py（数字/专名/锚点/长度四条）
@@ -148,6 +149,15 @@ docs/samples/       真实运行报告 + 五次重复的评测报告与逐轮指
 - prompt 三层：默认（代码）→ 覆盖（`backend/data/prompts.json`）→ 每次 run 的快照（进报告与 `--trace-out`）。
 - 整条重跑 + 顶部可切回历史 run；`cli eval` 永远用默认 prompt，存在覆盖时启动打印警告。
 - **已知限制**：run 与节点产物只在进程内存，重启即丢（能留存的是报告 HTML 与 CLI JSONL）；`--engine graph` 不发节点事件（API 默认 loop，界面不受影响）。
+
+**A2. D11 已完成（七个角色各配各的模型）**
+规格：`docs/superpowers/specs/2026-10-26-per-role-models-design.md`
+裁决：`docs/decisions/2026-10-26-model-selection-rulings.md`
+
+- 「角色 · 模型 · prompt」一张表：每个角色一个下拉（`/models/available` 返回网关 19 个 + 价格表），即改即存；覆盖落在 `backend/data/models.json`，每次 run 快照进报告。
+- **允许读者与主笔同模型**：不再启动拦截；`meta.reader_independent=false` 时界面与报告都标「非独立评审」。
+- **允许未登记价格的模型**：token 照记，成本显示 `≥ ¥x（N 次未计价）`，绝不写 0。
+- `cli eval` 仍固定 `.env` 默认模型，有覆盖时启动打印警告。
 
 **B. 评审里没修的 Minor**
 - 前端没有测试，`build` 只跑 `vite build`，没接 `vue-tsc`（`tsconfig.strict` 实际不生效）

@@ -21,6 +21,7 @@ async def run_profile(state: RunState, deps: Deps) -> ProfileCard:
     result = await deps.llm.structured(
         role="profile",
         system=deps.prompts.text("profile"),
+            model=deps.models.model("profile"),
         user=json.dumps(context, ensure_ascii=False),
         schema=ProfileCard,
     )

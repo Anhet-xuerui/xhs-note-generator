@@ -20,7 +20,11 @@ from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
-from app.config import PRICES, Settings, UnknownModelPrice
+from app.config import PRICES, Settings
+
+# 兼容旧导入：未登记价格不再是异常，但类名还被 `app.llm` 与旧测试引用着。
+from app.config import UnknownModelPrice as UnknownModelPrice  # noqa: F401
+from app.models import FALLBACK_MODELS, ModelSet
 from app.prompts import PromptSet
 from app.schemas import Usage
 
@@ -68,6 +72,8 @@ class Deps:
     event_sink: Callable[[dict[str, Any]], None] | None = None
     # 本次 run 用的 prompt 文本；默认取默认版，API 注入快照（D10-1/D10-3）。
     prompts: PromptSet = field(default_factory=PromptSet.defaults)
+    # 七个角色各自的模型；同样是快照，API 注入（D11）。
+    models: ModelSet = field(default_factory=lambda: ModelSet.defaults(FALLBACK_MODELS))
 
 
 def extract_json(text: str) -> str:
@@ -117,16 +123,18 @@ class LLMClient:
 
     # -- 计费 ---------------------------------------------------------------
 
-    def _price(self, model: str) -> tuple[float, float]:
-        try:
-            return PRICES[model]
-        except KeyError as exc:
-            raise UnknownModelPrice(model) from exc
+    def _price(self, model: str) -> tuple[float, float] | None:
+        """没登记价格不是错误：token 照记，钱标成「未计价」，绝不按 0 元混过去。"""
+        return PRICES.get(model)
 
-    def _cost_cny(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        pin, pout = self._price(model)
-        usd = (input_tokens * pin + output_tokens * pout) / 1_000_000
-        return usd * self._settings.usd_cny_rate
+    def _apply_cost(self, usage: Usage, model: str) -> None:
+        price = self._price(model)
+        if price is None:
+            usage.unpriced_calls += 1
+            return
+        pin, pout = price
+        usd = (usage.input_tokens * pin + usage.output_tokens * pout) / 1_000_000
+        usage.cost_cny = usd * self._settings.usd_cny_rate
 
     # -- 主入口 -------------------------------------------------------------
 
@@ -138,13 +146,16 @@ class LLMClient:
         user: str,
         schema: type[TModel],
         max_attempts: int | None = None,
+        model: str | None = None,
     ) -> CallResult[TModel]:
-        base_url, api_key, model = self._provider(role)
-        self._price(model)  # 未登记价格：在花钱之前就失败
+        base_url, api_key, default_model = self._provider(role)
+        chosen = model or default_model
+        if not chosen:
+            raise RuntimeError(f"角色 {role} 没有可用模型：检查 MODEL 配置")
         client = self._client(base_url, api_key)
 
         request: dict[str, Any] = {
-            "model": model,
+            "model": chosen,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
@@ -182,7 +193,7 @@ class LLMClient:
                 last_error = exc
                 if exc.status_code not in RETRYABLE_STATUS:
                     usage.elapsed_s = time.perf_counter() - started
-                    usage.cost_cny = self._cost_cny(model, usage.input_tokens, usage.output_tokens)
+                    self._apply_cost(usage, chosen)
                     raise NodeCallFailed(role, attempt, exc, usage=usage) from exc
                 continue
 
@@ -205,11 +216,11 @@ class LLMClient:
                 continue
 
             usage.elapsed_s = time.perf_counter() - started
-            usage.cost_cny = self._cost_cny(model, usage.input_tokens, usage.output_tokens)
+            self._apply_cost(usage, chosen)
             return CallResult(value=value, usage=usage, attempts=attempt)
 
         usage.elapsed_s = time.perf_counter() - started
-        usage.cost_cny = self._cost_cny(model, usage.input_tokens, usage.output_tokens)
+        self._apply_cost(usage, chosen)
         raise NodeCallFailed(role, budget, last_error or RuntimeError("未知失败"), usage=usage)
 
     @staticmethod

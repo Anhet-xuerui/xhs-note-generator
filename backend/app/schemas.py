@@ -171,12 +171,15 @@ class Usage:
     cost_cny: float = 0.0
     calls: int = 0
     elapsed_s: float = 0.0
+    # 价格表里没有的模型：token 照记，钱按「未计价」计次，绝不写成 0 元（成本不许估算）。
+    unpriced_calls: int = 0
 
     def merge(self, other: Usage) -> Usage:
         return Usage(
-            self.input_tokens + other.input_tokens,
-            self.output_tokens + other.output_tokens,
-            self.cost_cny + other.cost_cny,
-            self.calls + other.calls,
-            self.elapsed_s + other.elapsed_s,
+            input_tokens=self.input_tokens + other.input_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+            cost_cny=self.cost_cny + other.cost_cny,
+            calls=self.calls + other.calls,
+            elapsed_s=self.elapsed_s + other.elapsed_s,
+            unpriced_calls=self.unpriced_calls + other.unpriced_calls,
         )

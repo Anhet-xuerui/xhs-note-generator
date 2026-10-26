@@ -103,8 +103,13 @@ function duration(ms: number | undefined): string {
 
       <div v-if="node" class="stats">
         <span>耗时 {{ duration(node.elapsed_ms) }}</span>
-        <span>花费 {{ (node.usage?.cost_cny ?? 0).toFixed(4) }} 元</span>
+        <span>
+          花费 {{ (node.usage?.cost_cny ?? 0).toFixed(4) }} 元{{
+            (node.usage?.unpriced_calls ?? 0) > 0 ? '（未计价）' : ''
+          }}
+        </span>
         <span>{{ node.usage?.calls ?? 0 }} 次调用</span>
+        <span class="mono">模型 {{ node.model ?? '—' }}</span>
         <span class="mono">prompt {{ node.prompt_sha8 }}</span>
       </div>
 

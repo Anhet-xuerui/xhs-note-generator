@@ -68,6 +68,7 @@ async def run_writer(state: RunState, deps: Deps) -> tuple[Draft, list[WriterRes
         result = await deps.llm.structured(
             role="writer",
             system=deps.prompts.text("writer"),
+            model=deps.models.model("writer"),
             user=user,
             schema=WriterOutput,
             max_attempts=1,  # 节点层已经重出一次，不再叠加 client 的两次预算（评审 I7）

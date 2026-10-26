@@ -45,6 +45,7 @@ async def run_reader(state: RunState, deps: Deps) -> Verdict:
         result = await deps.llm.structured(
             role="reader",
             system=deps.prompts.text("reader"),
+            model=deps.models.model("reader"),
             user=render_reader_prompt(context),
             schema=Verdict,
         )

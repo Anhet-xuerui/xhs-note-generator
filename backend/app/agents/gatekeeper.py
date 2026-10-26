@@ -69,6 +69,7 @@ async def run_gatekeeper(state: RunState, deps: Deps, draft: HumanizedDraft) -> 
         call = await deps.llm.structured(
             role="gatekeeper",
             system=deps.prompts.text("gatekeeper"),
+            model=deps.models.model("gatekeeper"),
             user=json.dumps(payload, ensure_ascii=False),
             schema=GateJudgement,
         )

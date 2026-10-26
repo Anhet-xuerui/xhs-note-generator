@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ElMessage } from 'element-plus'
 import { computed } from 'vue'
 
 import { useRunStore } from '../stores/run'
@@ -12,6 +13,15 @@ const statusText = computed(() => {
   if (store.status === 'error') return '失败'
   return '待开始'
 })
+
+async function changeModel(role: string, model: string) {
+  try {
+    await store.setModel(role, model)
+  } catch (exc) {
+    ElMessage.error(exc instanceof Error ? exc.message : String(exc))
+    await store.loadModels()
+  }
+}
 
 function rowState(node: NodeRow): { text: string; kind: string } {
   if (node.pending) return { text: '运行中', kind: 'waiting' }
@@ -89,29 +99,43 @@ function openRole(role: string) {
     <el-card shadow="never" class="panel roles">
       <template #header>
         <div class="head">
-          <span class="panel-title">角色 prompt</span>
-          <span class="meta">不用先跑，点开就能改；保存后下一次生成生效</span>
+          <span class="panel-title">角色 · 模型 · prompt</span>
+          <span class="meta">改模型即存；没登记价格的模型，成本显示「≥」</span>
         </div>
       </template>
 
-      <button
+      <div
         v-for="item in store.prompts"
         :key="item.role"
-        type="button"
         class="node role"
         @click="openRole(item.role)"
       >
         <span class="dot idle" />
         <span class="name">{{ ROLE_LABELS[item.role] ?? item.role }}</span>
-        <span class="code mono">{{ item.role }}</span>
+        <el-select
+          class="model"
+          size="small"
+          :model-value="store.modelsByRole[item.role]?.model ?? ''"
+          @click.stop
+          @change="(value: string) => changeModel(item.role, value)"
+        >
+          <el-option
+            v-for="model in store.availableModels"
+            :key="model"
+            :value="model"
+            :label="model"
+          />
+        </el-select>
         <span class="tags">
-          <el-tag v-if="item.source === 'edited'" size="small" type="warning" effect="plain">已改动</el-tag>
-          <el-tag v-else size="small" type="info" effect="plain">默认</el-tag>
+          <el-tag v-if="store.modelsByRole[item.role]?.source === 'edited'" size="small" type="warning" effect="plain">
+            模型已改
+          </el-tag>
+          <el-tag v-if="item.source === 'edited'" size="small" type="warning" effect="plain">prompt 已改</el-tag>
         </span>
         <span class="meta mono sha">{{ item.sha8 }}</span>
-        <span class="meta edit">改 →</span>
-      </button>
-      <p v-if="!store.prompts.length" class="empty">prompt 还没加载出来，刷新一下页面试试。</p>
+        <span class="meta edit">改 prompt →</span>
+      </div>
+      <p v-if="!store.prompts.length" class="empty">角色还没加载出来，刷新一下页面试试。</p>
     </el-card>
   </div>
 </template>
@@ -161,7 +185,11 @@ function openRole(role: string) {
   background: #f9fafb;
 }
 .role {
-  grid-template-columns: 10px 88px minmax(0, 1fr) auto 72px 40px;
+  grid-template-columns: 10px 84px minmax(120px, 1fr) auto 56px 86px;
+  cursor: pointer;
+}
+.model {
+  width: 100%;
 }
 .dot {
   width: 8px;

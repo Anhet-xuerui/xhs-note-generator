@@ -12,6 +12,7 @@ const store = useRunStore()
 
 onMounted(() => {
   void store.loadPrompts()
+  void store.loadModels()
   void store.loadRuns()
 })
 onUnmounted(() => store.stop())

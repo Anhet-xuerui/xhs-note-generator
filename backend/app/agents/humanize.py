@@ -72,6 +72,7 @@ async def run_humanize(
         result = await deps.llm.structured(
             role="humanizer",
             system=deps.prompts.text("humanizer"),
+            model=deps.models.model("humanizer"),
             user=json.dumps(context, ensure_ascii=False),
             schema=HumanizeOutput,
         )

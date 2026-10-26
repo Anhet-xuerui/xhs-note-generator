@@ -61,6 +61,15 @@ function label(runId: string): string {
         已修改 {{ store.editedRoles.length }} 个 prompt
       </el-tag>
 
+      <el-tag
+        v-if="store.models.length && !store.readerIndependent"
+        type="warning"
+        size="small"
+        effect="plain"
+      >
+        读者=主笔：非独立评审
+      </el-tag>
+
       <el-button
         type="primary"
         size="small"
@@ -71,8 +80,7 @@ function label(runId: string): string {
       </el-button>
 
       <span v-if="store.usage" class="meta">
-        {{ store.usage.calls }} 次调用 · {{ store.usage.cost_cny }} 元 ·
-        {{ store.usage.elapsed_s }} 秒
+        {{ store.usage.calls }} 次调用 · {{ store.costLabel }} · {{ store.usage.elapsed_s }} 秒
       </span>
 
       <el-link v-if="store.runId" :href="store.report" target="_blank" type="primary" :underline="false">
