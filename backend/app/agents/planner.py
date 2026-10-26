@@ -49,6 +49,7 @@ async def run_planner(state: RunState, deps: Deps) -> Angle:
         result = await deps.llm.structured(
             role="planner",
             system=deps.prompts.text("planner"),
+            model=deps.models.model("planner"),
             user=user,
             schema=AngleSet,
             max_attempts=1,  # 节点层已重出一次（评审 I7）

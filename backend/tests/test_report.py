@@ -96,3 +96,28 @@ def test_report_without_prompt_snapshot_still_renders():
 
     assert "<!doctype html>" in page
     assert "没有记录 prompt 快照" in page
+
+
+def test_report_lists_models_marks_unpriced_and_shared_reader():
+    """D11：模型、未计价、以及「读者=主笔不算独立评审」三件事都要进报告。"""
+    payload = {
+        "title": "t",
+        "body": "b",
+        "status": "passed",
+        "meta": {
+            "usage": {"cost_cny": 0.01, "unpriced_calls": 2, "calls": 3, "elapsed_s": 1},
+            "models": {
+                "writer": {"model": "kimi-k3-1", "source": "default", "priced": "no"},
+                "reader": {"model": "kimi-k3-1", "source": "edited", "priced": "no"},
+            },
+            "reader_independent": False,
+        },
+    }
+
+    page = render_report([], payload)
+
+    assert "kimi-k3-1" in page
+    assert "未计价" in page
+    assert "≥ 0.01 元" in page
+    assert "不构成独立评审" in page
+    assert "已改动" in page

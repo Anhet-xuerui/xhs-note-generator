@@ -26,6 +26,7 @@ from app.evaluation.runners import run_e1, run_e1_pairwise, run_e2, run_e3_pairw
 from app.graph.decisions import evaluate
 from app.graph.loop import finish_draft, run_loop
 from app.llm.client import Deps, LLMClient, NodeCallFailed
+from app.models import ModelSet, ModelStore, default_models
 from app.prompts import PromptSet, PromptStore
 from app.report.html import render_report
 from app.report.trace import append_event, build_trace, read_events
@@ -33,14 +34,26 @@ from app.schemas import PersonaInput, RunInput, Usage
 from app.state import RunState
 
 
-def build_deps(prompts: PromptSet | None = None) -> Deps:
+def build_deps(
+    prompts: PromptSet | None = None, models: ModelSet | None = None
+) -> Deps:
     """唯一构造 Settings + LLMClient 的地方（测试通过 monkeypatch 替换它）。
 
-    `prompts=None` 时读当前生效的覆盖层；评测路径显式传 `PromptSet.defaults()`（D10-9）。
+    `prompts=None` / `models=None` 时读当前生效的覆盖层；评测路径显式传默认版（D10-9、D11）。
     """
     settings = Settings.load()
-    resolved = prompts if prompts is not None else PromptStore().snapshot()
-    return Deps(llm=LLMClient(settings), settings=settings, prompts=resolved)
+    resolved_prompts = prompts if prompts is not None else PromptStore().snapshot()
+    resolved_models = (
+        models
+        if models is not None
+        else ModelStore().snapshot(default_models(settings))
+    )
+    return Deps(
+        llm=LLMClient(settings),
+        settings=settings,
+        prompts=resolved_prompts,
+        models=resolved_models,
+    )
 
 
 def new_state(persona: PersonaInput, topic: str) -> RunState:
@@ -73,6 +86,7 @@ def result_payload(state: RunState) -> dict:
     smell = state.get("smell")
     gate = state.get("gate")
     prompts = state.get("prompts") or {}
+    models = state.get("models") or {}
     return {
         "title": draft.title if draft else None,
         "cover_text": draft.cover_text if draft else None,
@@ -98,12 +112,21 @@ def result_payload(state: RunState) -> dict:
                 "cost_cny": round(usage.cost_cny, 4),
                 "calls": usage.calls,
                 "elapsed_s": round(usage.elapsed_s, 2),
+                # 没登记价格的调用次数：前端显示「≥ ¥x」而不是「¥x」
+                "unpriced_calls": usage.unpriced_calls,
             },
             # 哪几个角色的 prompt 被改过、各是什么指纹（D10-3）
             "prompts_edited": sorted(
                 role for role, item in prompts.items() if item.get("source") == "edited"
             ),
             "prompts_sha8": {role: item.get("sha8") for role, item in prompts.items()},
+            # D11：七个角色各用了什么模型；读者与主笔同模型时不算独立评审
+            "models": models,
+            "models_edited": sorted(
+                role for role, item in models.items() if item.get("source") == "edited"
+            ),
+            "reader_independent": (models.get("reader") or {}).get("model")
+            != (models.get("writer") or {}).get("model"),
         },
     }
 
@@ -114,8 +137,9 @@ async def _run_pipeline(state: RunState, deps: Deps, engine: str = "loop") -> Ru
     `engine="graph"` 走 LangGraph + SqliteSaver，可回放/可续跑；默认的手写 loop
     更好调试，两者共用同一批节点函数与判定纯函数。
     """
-    # CLI 直接跑也要留下 prompt 快照：`--trace-out` 的 JSONL 是唯一留存的证据（S1、N9）。
+    # CLI 直接跑也要留下 prompt / 模型快照：`--trace-out` 的 JSONL 是唯一留存的证据（S1、N9）。
     state.setdefault("prompts", deps.prompts.record())
+    state.setdefault("models", deps.models.record())
     if engine == "graph":
         from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
@@ -157,9 +181,12 @@ def _swapped_reader(settings: Settings) -> Deps:
             "reader_api_key": settings.writer_api_key,
         }
     )
-    # 评测是量具：量具不能跟着被测量对象一起变（D10-9）。
+    # 评测是量具：量具不能跟着被测量对象一起变（D10-9、D11）。
     return Deps(
-        llm=LLMClient(swapped), settings=swapped, prompts=PromptSet.defaults()
+        llm=LLMClient(swapped),
+        settings=swapped,
+        prompts=PromptSet.defaults(),
+        models=ModelSet.defaults(default_models(swapped)),
     )
 
 
@@ -231,7 +258,12 @@ async def _evaluate(args) -> EvalBundle:
             f"[eval] 当前有 {len(edited)} 个 prompt 被改过（{'、'.join(edited)}），本次评测仍用默认版",
             file=sys.stderr,
         )
-    deps = Deps(llm=LLMClient(settings), settings=settings, prompts=PromptSet.defaults())
+    deps = Deps(
+        llm=LLMClient(settings),
+        settings=settings,
+        prompts=PromptSet.defaults(),
+        models=ModelSet.defaults(default_models(settings)),
+    )
     swapped = _swapped_reader(settings)
     topics = _load_topics()[: args.topics]
     personas = _load_personas()

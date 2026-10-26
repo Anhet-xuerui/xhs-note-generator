@@ -43,6 +43,7 @@ async def judge_draft(
     context = build_reader_context(state)
     result = await deps.llm.structured(
         role=role_provider,
+        model=deps.models.model("reader"),
         system=READER_PROMPT,
         user=render_reader_prompt(context),
         schema=Verdict,

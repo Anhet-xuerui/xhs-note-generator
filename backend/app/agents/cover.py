@@ -29,6 +29,7 @@ async def run_cover(state: RunState, deps: Deps) -> str:
         result = await deps.llm.structured(
             role="cover",
             system=deps.prompts.text("cover"),
+            model=deps.models.model("cover"),
             user=json.dumps(context, ensure_ascii=False),
             schema=CoverText,
         )

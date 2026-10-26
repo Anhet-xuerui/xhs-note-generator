@@ -1,4 +1,5 @@
 import type {
+  ModelsResponse,
   Persona,
   PromptsResponse,
   RunEvent,
@@ -63,6 +64,29 @@ export function resetPrompt(role: string): Promise<{ sha8: string; source: strin
 
 export function resetAllPrompts(): Promise<PromptsResponse> {
   return request<PromptsResponse>('/prompts', { method: 'DELETE' })
+}
+
+export function fetchModels(): Promise<ModelsResponse> {
+  return request<ModelsResponse>('/models')
+}
+
+export function fetchAvailableModels(): Promise<{ items: string[] }> {
+  return request<{ items: string[] }>('/models/available')
+}
+
+export function saveModel(
+  role: string,
+  model: string,
+): Promise<{ source: string; reader_independent: boolean }> {
+  return request<{ source: string; reader_independent: boolean }>(`/models/${role}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+}
+
+export function resetModel(role: string): Promise<{ source: string }> {
+  return request<{ source: string }>(`/models/${role}`, { method: 'DELETE' })
 }
 
 /**

@@ -11,10 +11,10 @@ import pytest
 from app.agents.profile import run_profile
 from app.agents.writer import run_writer
 from app.cli import result_payload
-from app.config import ReaderNotConfigured, Settings
+from app.config import Settings
 from app.graph.decisions import detect_stuck, pick_best_round
 from app.graph.loop import run_loop
-from app.llm.client import LLMClient, NodeCallFailed, UnknownModelPrice
+from app.llm.client import LLMClient, NodeCallFailed
 from app.schemas import Draft, PersonaInput, ProfileCard, RunInput, Verdict
 from tests.helpers import deps_with, make_angles, make_card, make_state, make_writer_output
 
@@ -88,7 +88,8 @@ async def test_planner_failure_falls_back_to_previous_angle():
     assert out["status"] in {"exhausted", "passed"}
 
 
-async def test_reader_model_must_be_priced(monkeypatch):
+async def test_unpriced_reader_model_is_allowed(monkeypatch):
+    """D11：价格可缺省；缺席的后果是成本显示「未计价」，不是拒绝启动。"""
     for name, value in {
         "WRITER_API_KEY": "w",
         "READER_API_KEY": "r",
@@ -96,11 +97,14 @@ async def test_reader_model_must_be_priced(monkeypatch):
         "READER_MODEL": "not-in-prices",
     }.items():
         monkeypatch.setenv(name, value)
-    with pytest.raises(UnknownModelPrice, match="not-in-prices"):
-        Settings.load(_env_file=None)
+
+    settings = Settings.load(_env_file=None)
+
+    assert settings.reader_model == "not-in-prices"
 
 
-def test_reader_must_not_be_the_same_provider(monkeypatch):
+def test_reader_may_share_writer_model(monkeypatch):
+    """D11：允许同模型，但由 run 快照标出「不独立」，不再在启动时拦。"""
     for name, value in {
         "WRITER_API_KEY": "w",
         "WRITER_BASE_URL": "https://api.deepseek.com",
@@ -110,8 +114,10 @@ def test_reader_must_not_be_the_same_provider(monkeypatch):
         "READER_MODEL": "deepseek-flash",
     }.items():
         monkeypatch.setenv(name, value)
-    with pytest.raises(ReaderNotConfigured, match="厂商"):
-        Settings.load(_env_file=None)
+
+    settings = Settings.load(_env_file=None)
+
+    assert settings.reader_model == settings.writer_model
 
 
 # --- I1/I2：降级判定卡不参与「最佳轮」，且第一轮就失败直接收工 -------------

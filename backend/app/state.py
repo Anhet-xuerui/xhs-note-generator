@@ -46,6 +46,8 @@ class RunState(TypedDict, total=False):
     smell: SmellReport | None
     # D10：本 run 用的 prompt 快照（role → {text, sha8, source}）
     prompts: dict[str, dict[str, str]]
+    # D11：本 run 七个角色各自的模型（role → {model, source, priced}）
+    models: dict[str, dict[str, str]]
     # D10-12：谁走了兜底、为什么。`_step` 靠它给 node_end 打 degraded 标。
     degraded_nodes: list[dict[str, str | int]]
     # D10-5：事件身份，供时间线排序与标「复核」

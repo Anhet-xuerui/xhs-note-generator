@@ -28,6 +28,7 @@ export interface NodeUsage {
   output_tokens: number
   cost_cny: number
   calls: number
+  unpriced_calls?: number
 }
 
 export interface RunResult {
@@ -40,11 +41,14 @@ export interface RunResult {
     rounds_used: number
     best_round: number | null
     failed_checks: FailedCheck[]
-    usage: { cost_cny: number; calls: number; elapsed_s: number }
+    usage: { cost_cny: number; calls: number; elapsed_s: number; unpriced_calls?: number }
     smell?: { before: number; after: number; fidelity: string } | null
     gate_findings?: GateFinding[]
     prompts_edited?: string[]
     prompts_sha8?: Record<string, string>
+    models?: Record<string, { model: string; source: string; priced: string }>
+    models_edited?: string[]
+    reader_independent?: boolean
   }
 }
 
@@ -67,6 +71,7 @@ export interface NodeEvent extends RunEvent {
   elapsed_ms?: number
   usage?: NodeUsage
   prompt_sha8?: string
+  model?: string
   product?: unknown
 }
 
@@ -102,6 +107,19 @@ export interface RunSummary {
   status: string | null
   created_at: string | null
   prompts_edited: string[]
+}
+
+export interface ModelItem {
+  role: string
+  model: string
+  default_model: string
+  source: 'default' | 'edited'
+  updated_at: string | null
+}
+
+export interface ModelsResponse {
+  roles: string[]
+  items: ModelItem[]
 }
 
 export const ROLE_LABELS: Record<string, string> = {

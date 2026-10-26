@@ -12,7 +12,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.config import PRICES, Settings
-from app.llm.client import LLMClient, NodeCallFailed, UnknownModelPrice
+from app.llm.client import LLMClient, NodeCallFailed
 
 
 class Sample(BaseModel):
@@ -97,13 +97,32 @@ async def test_cost_uses_price_table_and_rate(settings):
     assert result.usage.cost_cny == pytest.approx(expected_usd * settings.usd_cny_rate)
 
 
-async def test_unpriced_model_raises(settings):
+async def test_unpriced_model_records_tokens_without_cost(settings):
+    """没登记价格：token 照记，钱记成「未计价」，绝不写 0 元（D11）。"""
     settings.reader_model = "unknown-model"
     body = '{"click": true, "read_through": 0.8}'
     client = LLMClient(settings, http_client=httpx.AsyncClient(transport=transport(body)))
 
-    with pytest.raises(UnknownModelPrice, match="unknown-model"):
-        await client.structured(role="reader", system="s", user="u", schema=Sample)
+    result = await client.structured(role="reader", system="s", user="u", schema=Sample)
+
+    assert result.usage.input_tokens == 1000
+    assert result.usage.output_tokens == 500
+    assert result.usage.cost_cny == 0.0
+    assert result.usage.unpriced_calls == 1
+
+
+async def test_model_argument_overrides_settings(settings):
+    captured: list[dict] = []
+    body = '{"click": true, "read_through": 0.8}'
+    client = LLMClient(
+        settings, http_client=httpx.AsyncClient(transport=transport(body, captured=captured))
+    )
+
+    await client.structured(
+        role="writer", model="glm-5.3-flash", system="s", user="u", schema=Sample
+    )
+
+    assert captured[0]["model"] == "glm-5.3-flash"
 
 
 async def test_transport_timeout_retries_once_then_succeeds(settings):

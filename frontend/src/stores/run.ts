@@ -4,17 +4,22 @@ import { computed, reactive, ref } from 'vue'
 
 import {
   createRun,
+  fetchAvailableModels,
+  fetchModels,
   fetchPrompts,
   fetchRun,
   fetchRunPrompts,
   fetchRuns,
   reportUrl,
   resetAllPrompts,
+  resetModel,
   resetPrompt,
+  saveModel,
   savePrompt,
   subscribe,
 } from '../api'
 import type {
+  ModelItem,
   NodeEvent,
   NodeRow,
   Persona,
@@ -54,6 +59,8 @@ export const useRunStore = defineStore('run', () => {
   const runs = ref<RunSummary[]>([])
   const prompts = ref<PromptItem[]>([])
   const runPrompts = ref<RunPromptItem[]>([])
+  const models = ref<ModelItem[]>([])
+  const availableModels = ref<string[]>([])
   const dirty = reactive<Record<string, boolean>>({})
   // 抽屉的目标：跑过的节点带产物，没跑过的只有角色（预编辑 prompt）。
   const target = ref<{ role: string; node: NodeEvent | null } | null>(null)
@@ -90,6 +97,23 @@ export const useRunStore = defineStore('run', () => {
   })
   const checks = computed(() => result.value?.meta.failed_checks ?? [])
   const usage = computed(() => result.value?.meta.usage)
+  const costLabel = computed(() => {
+    const value = usage.value
+    if (!value) return ''
+    const base = `${value.cost_cny} 元`
+    return (value.unpriced_calls ?? 0) > 0 ? `≥ ${base}（${value.unpriced_calls} 次未计价）` : base
+  })
+  const modelsByRole = computed<Record<string, ModelItem>>(() =>
+    Object.fromEntries(models.value.map((item) => [item.role, item])),
+  )
+  const editedModels = computed(() =>
+    models.value.filter((item) => item.source === 'edited').map((item) => item.role),
+  )
+  const readerIndependent = computed(
+    () =>
+      modelsByRole.value.reader?.model !== undefined &&
+      modelsByRole.value.reader?.model !== modelsByRole.value.writer?.model,
+  )
   const editedRoles = computed(() =>
     prompts.value.filter((item) => item.source === 'edited').map((item) => item.role),
   )
@@ -178,6 +202,22 @@ export const useRunStore = defineStore('run', () => {
     prompts.value = (await fetchPrompts()).items
   }
 
+  async function loadModels() {
+    const [list, available] = await Promise.all([fetchModels(), fetchAvailableModels()])
+    models.value = list.items
+    availableModels.value = available.items
+  }
+
+  async function setModel(role: string, model: string) {
+    await saveModel(role, model)
+    await loadModels()
+  }
+
+  async function resetModelToDefault(role: string) {
+    await resetModel(role)
+    await loadModels()
+  }
+
   async function loadRuns() {
     runs.value = (await fetchRuns()).items
   }
@@ -257,6 +297,12 @@ export const useRunStore = defineStore('run', () => {
     runs,
     prompts,
     runPrompts,
+    models,
+    availableModels,
+    modelsByRole,
+    editedModels,
+    readerIndependent,
+    costLabel,
     promptByRole,
     runPromptByRole,
     editedRoles,
@@ -270,6 +316,9 @@ export const useRunStore = defineStore('run', () => {
     hasUnsaved,
     markDirty,
     loadPrompts,
+    loadModels,
+    setModel,
+    resetModelToDefault,
     loadRuns,
     loadRunPrompts,
     start,

@@ -21,9 +21,17 @@ from pydantic import BaseModel, Field
 
 from app.api.bus import RunBus
 from app.cli import _run_pipeline, build_deps, new_state, result_payload
-from app.config import Settings
+from app.config import PRICES, Settings
 from app.graph.decisions import passed, pick_best_round
 from app.llm.client import Deps
+from app.models import (
+    FALLBACK_MODELS,
+    EmptyModelName,
+    ModelError,
+    ModelStore,
+    UnknownModelRole,
+    default_models,
+)
 from app.prompts import (
     ROLES,
     EmptyPrompt,
@@ -57,8 +65,41 @@ class PromptUpdate(BaseModel):
     text: str
 
 
+class ModelUpdate(BaseModel):
+    model: str
+
+
 def _now() -> str:
     return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _model_http_error(exc: ModelError) -> HTTPException:
+    if isinstance(exc, UnknownModelRole):
+        return HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, EmptyModelName):
+        return HTTPException(status_code=422, detail=str(exc))
+    return HTTPException(status_code=422, detail=str(exc))
+
+
+async def _gateway_models(settings: Settings) -> set[str]:
+    """问网关到底有哪些模型；问不到就返回空集，界面退化成价格表那 4 个。"""
+    import httpx2
+
+    base = settings.writer_base_url.rstrip("/")
+    try:
+        async with httpx2.AsyncClient(timeout=5) as client:
+            response = await client.get(
+                f"{base}/models",
+                headers={"Authorization": f"Bearer {settings.writer_api_key or ''}"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except Exception:  # noqa: BLE001 - 拿不到清单不算错误
+        return set()
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, list):
+        return set()
+    return {item["id"] for item in data if isinstance(item, dict) and item.get("id")}
 
 
 def _prompt_http_error(exc: PromptError) -> HTTPException:
@@ -77,16 +118,64 @@ def create_app(
     deps_factory: Callable[[RunBus, str], Deps] | None = None,
     engine: str = "loop",
     prompt_store: PromptStore | None = None,
+    model_store: ModelStore | None = None,
+    model_defaults: dict[str, str] | None = None,
 ) -> FastAPI:
+    settings: Settings | None = None
     if deps_factory is None:
         # 生产路径：配置错就启动失败，而不是等第一个 run 才炸（评审 C2）。
-        Settings.load()
+        settings = Settings.load()
         deps_factory = lambda bus, run_id: build_deps()  # noqa: E731
     app = FastAPI(title="小红书多角色笔记生成")
     bus = RunBus()
     store = prompt_store or PromptStore()
+    models_store = model_store or ModelStore()
+    defaults = model_defaults or (default_models(settings) if settings else dict(FALLBACK_MODELS))
     runs: dict[str, dict[str, Any]] = {}
     background: set[asyncio.Task] = set()
+
+    @app.get("/models")
+    async def list_models() -> dict[str, Any]:
+        return {"roles": list(ROLES), "items": models_store.items(defaults)}
+
+    @app.get("/models/available")
+    async def available_models() -> dict[str, Any]:
+        """下拉候选：价格表 + 当前默认值；生产环境再并上网关的真实清单。"""
+        ids = set(PRICES) | {model for model in defaults.values() if model}
+        if settings is not None:
+            ids |= await _gateway_models(settings)
+        return {"items": sorted(ids)}
+
+    @app.put("/models/{role}")
+    async def update_model(role: str, payload: ModelUpdate) -> dict[str, Any]:
+        try:
+            snapshot = models_store.set(role, payload.model, defaults)
+        except ModelError as exc:
+            raise _model_http_error(exc) from exc
+        return {
+            "role": role,
+            "model": snapshot.model(role),
+            "source": snapshot.sources[role],
+            "reader_independent": snapshot.reader_independent(),
+        }
+
+    @app.delete("/models/{role}")
+    async def reset_model(role: str) -> dict[str, Any]:
+        try:
+            snapshot = models_store.reset(role, defaults)
+        except ModelError as exc:
+            raise _model_http_error(exc) from exc
+        return {
+            "role": role,
+            "model": snapshot.model(role),
+            "source": snapshot.sources[role],
+            "reader_independent": snapshot.reader_independent(),
+        }
+
+    @app.delete("/models")
+    async def reset_all_models() -> dict[str, Any]:
+        models_store.reset(None, defaults)
+        return {"roles": list(ROLES), "items": models_store.items(defaults)}
 
     @app.get("/prompts")
     async def list_prompts() -> dict[str, Any]:
@@ -144,6 +233,11 @@ def create_app(
                 deps.event_sink = lambda event: bus.publish(run_id, event)
                 # 工厂可能又读了一次 store：强制用创建时那一份，两处不能有两个答案。
                 deps.prompts = snapshot
+                # 模型同样一次快照：跑过之后改模型不影响这个 run（D11）。
+                model_set = models_store.snapshot(defaults)
+                state["models"] = model_set.record()
+                deps.models = model_set
+                runs[run_id]["models"] = model_set
                 await _run_pipeline(state, deps, engine)
             except Exception as exc:  # noqa: BLE001 - 任何异常都要变成可读事件
                 state["status"] = "failed"

@@ -1,10 +1,12 @@
 """运行配置：两组独立 provider + 价格表。
 
-设计约束（见设计文档 §13、§4）：
+设计约束（见设计文档 §13、§4、D11）：
 
-- **读者必须走独立 provider**。`READER_*` 缺失时 `Settings.load()` 直接报错，不提供
-  「回落到 WRITER_*」的路径——两个 temperature 不是换厂商，E2 会因此作废。
-- 价格表单位是「美元 / 百万 token」，取**高峰价**（保守上界），避免成本被低估。
+- **读者的 provider 仍然独立配置**：`READER_*` 缺失时 `Settings.load()` 直接报错，不提供
+  「回落到 WRITER_*」的路径。D11 起**模型**可以自由选、也允许和主笔相同——但那样的 run
+  会被标记为「非独立评审」，E2/E3 的结论不适用于它。
+- 价格表单位是「美元 / 百万 token」，取**高峰价**（保守上界）。表里没有的模型也能跑：
+  token 照记，成本记成「未计价」，绝不写 0（成本不许估算）。
 """
 
 from __future__ import annotations
@@ -92,18 +94,6 @@ class Settings(BaseSettings):
         if not settings.writer_api_key:
             raise WriterNotConfigured("缺少 WRITER_API_KEY，主笔无法调用模型。")
 
-        # 价格必须先登记：否则会在花掉画像官/策划/主笔的钱之后才炸（评审 C2）。
-        if settings.reader_model not in PRICES:
-            raise UnknownModelPrice(settings.reader_model or "")
-
-        # 「换厂商」是机制不是偏好（§13）：同一家同一模型等于没换，E2 会作废。
-        same_vendor = (settings.reader_base_url, settings.reader_model) == (
-            settings.writer_base_url,
-            settings.writer_model,
-        )
-        if same_vendor:
-            raise ReaderNotConfigured(
-                "读者配置与主笔完全相同（同 base_url 同模型），等于没有换厂商；"
-                "§13 要求读者用另一家厂商的模型，请改 READER_BASE_URL / READER_MODEL。"
-            )
+        # D11 起：模型可以自由选（含未登记价格的），也可以与读者相同。
+        # 「成本不许估算」改由 Usage.unpriced_calls 承担：没价格就报「未计价」，不写 0。
         return settings

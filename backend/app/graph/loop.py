@@ -92,6 +92,7 @@ async def _step(
                     "elapsed_ms": int((perf_counter() - started) * 1000),
                     "usage": _usage_delta(usage_before, state.get("usage")),
                     "prompt_sha8": deps.prompts.sha8(node),
+                    "model": deps.models.model(node),
                 }
             )
         raise
@@ -106,6 +107,7 @@ async def _step(
             "elapsed_ms": int((perf_counter() - started) * 1000),
             "usage": _usage_delta(usage_before, state.get("usage")),
             "prompt_sha8": deps.prompts.sha8(node),
+            "model": deps.models.model(node),
             "product": (serialize or _default_serialize)(result),
         }
         if fresh:

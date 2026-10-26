@@ -32,7 +32,7 @@ const gateHits = computed(() =>
         状态 <b>{{ store.result.status }}</b>｜{{ store.result.meta.rounds_used }} 轮｜
         交付第 {{ store.result.meta.best_round ?? '—' }} 轮
         <template v-if="store.usage">
-          ｜{{ store.usage.calls }} 次调用｜{{ store.usage.cost_cny }} 元｜{{ store.usage.elapsed_s }} 秒
+          ｜{{ store.usage.calls }} 次调用｜{{ store.costLabel }}｜{{ store.usage.elapsed_s }} 秒
         </template>
       </p>
       <p v-if="store.result.meta.smell" class="kv">
